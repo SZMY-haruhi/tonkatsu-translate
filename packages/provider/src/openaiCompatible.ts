@@ -149,25 +149,46 @@ export function createOpenAICompatibleProvider(
       payload.enable_thinking = false;
     }
 
+    const packStarted = Date.now();
+    const body = JSON.stringify(payload);
+    const packMs = Date.now() - packStarted;
+
+    const fetchStarted = Date.now();
     const response = await fetchImpl(endpoint, {
       method: 'POST',
       headers,
-      body: JSON.stringify(payload),
+      body,
     });
+    const fetchMs = Date.now() - fetchStarted;
 
     if (!response.ok) {
-      const body = await response.text().catch(() => '');
-      const detail = body ? `: ${body.slice(0, 200)}` : '';
+      const errBody = await response.text().catch(() => '');
+      const detail = errBody ? `: ${errBody.slice(0, 200)}` : '';
       throw new Error(`Provider HTTP ${response.status} ${response.statusText}${detail}`);
     }
 
+    const parseStarted = Date.now();
     const data = (await response.json()) as {
       choices?: Array<{
         message?: { content?: string; reasoning_content?: string };
       }>;
     };
     const content = extractMessageContent(data.choices?.[0]?.message ?? {});
-    return parseTranslations(content, input.texts.length);
+    const translations = parseTranslations(content, input.texts.length);
+    const parseMs = Date.now() - parseStarted;
+
+    // Perf probe: packing/parsing = send-side; fetch wait = model/API.
+    console.log('[TT-PERF][openai]', {
+      texts: input.texts.length,
+      chars: input.texts.reduce((n, t) => n + t.length, 0),
+      packMs,
+      fetchMs,
+      parseMs,
+      strict,
+      endpoint,
+    });
+
+    return translations;
   }
 
   async function translate(input: {

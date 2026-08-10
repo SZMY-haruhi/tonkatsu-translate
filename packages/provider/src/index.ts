@@ -10,12 +10,16 @@ export {
   type LibreTranslateProviderConfig,
 } from './libreTranslate'
 export {
-  createMyMemoryProvider,
-  mapMyMemoryLang,
-  guessSourceLang,
-  DEFAULT_MYMEMORY_ENDPOINT,
-  type MyMemoryProviderConfig,
-} from './myMemory'
+  createDeepLProvider,
+  mapDeepLTargetLang,
+  mapDeepLSourceLang,
+  inferDeepLPlan,
+  deeplEndpoint,
+  DEEPL_FREE_ENDPOINT,
+  DEEPL_PRO_ENDPOINT,
+  type DeepLProviderConfig,
+  type DeepLPlan,
+} from './deepl'
 export {
   createProviderFromSettings,
   cacheModelId,

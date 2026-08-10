@@ -3,7 +3,7 @@
  *
  * Usage:
  *   node scripts/package-release.mjs
- *   node scripts/package-release.mjs --version=1.0.0-rc.1
+ *   node scripts/package-release.mjs --version=1.0.0-rc.2
  */
 import { spawn } from 'node:child_process'
 import {
@@ -100,8 +100,8 @@ function shouldCopySource(relPath) {
   if (norm.startsWith('apps/extension/.output/')) return false
   if (norm.startsWith('apps/extension/.wxt/')) return false
   if (norm.startsWith('.smoke')) return false
-  if (norm.includes('/docs/qa/')) return false
-  if (norm.includes('/docs/superpowers/')) return false
+  if (/(^|\/)docs\/qa(\/|$)/.test(norm)) return false
+  if (/(^|\/)docs\/superpowers(\/|$)/.test(norm)) return false
   if (/(^|\/)\.env($|\.)/i.test(norm)) return false
   if (/\.env$/i.test(norm)) return false
   if (/test-modelskey\.env$/i.test(norm)) return false
@@ -127,11 +127,14 @@ function collectSourceFiles(dir, out = []) {
 }
 
 function assertCleanZipListing(entries, label) {
-  const bad = entries.filter(
-    (e) =>
-      FORBIDDEN_NAME.test(e) ||
-      /docs\/qa|docs\/superpowers|smoke-extension|\.env|test-modelskey/i.test(e),
-  )
+  const bad = entries.filter((e) => {
+    const norm = e.replace(/\\/g, '/')
+    return (
+      FORBIDDEN_NAME.test(norm) ||
+      /(^|\/)docs\/(qa|superpowers)(\/|$)/i.test(norm) ||
+      /smoke-extension|\.env|test-modelskey/i.test(norm)
+    )
+  })
   if (bad.length) {
     throw new Error(`[package] ${label} contains forbidden paths:\n${bad.join('\n')}`)
   }
@@ -178,15 +181,12 @@ async function main() {
     console.log(`[package] bumped extension version → ${version}`)
   }
 
-  // Guard: repo must not still expose test/smoke entrypoints.
-  const rootPkg = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8'))
-  for (const banned of ['test', 'smoke', 'smoke:keep']) {
-    if (rootPkg.scripts?.[banned]) {
-      throw new Error(`[package] root package.json still has script "${banned}"`)
-    }
-  }
+  // Local smoke/bench harnesses are fine in the working tree; they are
+  // excluded from the source zip (FORBIDDEN_NAME / shouldCopySource).
   if (existsSync(resolve(root, 'scripts/smoke-extension.mjs'))) {
-    throw new Error('[package] scripts/smoke-extension.mjs still exists')
+    console.warn(
+      '[package] note: local smoke harness present — excluded from source zip',
+    )
   }
 
   console.log('[package] building chrome-mv3…')
@@ -251,6 +251,29 @@ async function main() {
     mkdirSync(dirname(to), { recursive: true })
     cpSync(from, to)
   }
+  // Strip local-only scripts/deps from the distributable source package.json.
+  const stagedRootPkgPath = join(srcStage, 'package.json')
+  if (existsSync(stagedRootPkgPath)) {
+    const stagedRoot = JSON.parse(readFileSync(stagedRootPkgPath, 'utf8'))
+    if (stagedRoot.scripts) {
+      for (const banned of ['test', 'smoke', 'smoke:keep']) {
+        delete stagedRoot.scripts[banned]
+      }
+    }
+    if (stagedRoot.devDependencies) {
+      for (const dep of ['puppeteer-core', 'dotenv']) {
+        delete stagedRoot.devDependencies[dep]
+      }
+      if (Object.keys(stagedRoot.devDependencies).length === 0) {
+        delete stagedRoot.devDependencies
+      }
+    }
+    writeFileSync(
+      stagedRootPkgPath,
+      `${JSON.stringify(stagedRoot, null, 2)}\n`,
+      'utf8',
+    )
+  }
   const sourceZip = join(
     releaseDir,
     `tonkatsu-translate-v${version}-source.zip`,
@@ -267,6 +290,8 @@ async function main() {
     `# Tonkatsu Translate v${version}
 
 Clean release (GitHub sideload; **not** Chrome Web Store).
+
+Default engine: **DeepL** (BYOK). MyMemory removed. Machine-translation requests go directly to the provider you configure.
 
 ## Assets
 

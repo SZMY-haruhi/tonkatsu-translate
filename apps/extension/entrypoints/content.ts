@@ -9,6 +9,7 @@ import { bindSelectionTranslate } from '../lib/selection';
 import { getSessionState, setSessionState } from '../lib/session';
 import { loadSettings } from '../lib/settings';
 import { siteBlockedMessage } from '../lib/siteRules';
+import { resetContentTranslationCache } from '../lib/contentTranslateCache';
 
 export default defineContentScript({
   matches: ['<all_urls>'],
@@ -48,11 +49,13 @@ export default defineContentScript({
         controls?.restore();
         controls = null;
         const settings = await loadSettings();
+        resetContentTranslationCache(settings);
         controls = startPageTranslation({
           mode: settings.displayMode,
           translateBatch: translateBatchViaBackground,
-          maxConcurrency: Math.max(2, settings.maxConcurrency || 3),
+          maxConcurrency: settings.maxConcurrency,
           targetLang: settings.targetLang,
+          engine: settings.engine,
           onProgress: (state) => {
             void publish(state);
           },

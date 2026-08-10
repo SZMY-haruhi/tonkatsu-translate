@@ -1,4 +1,4 @@
-import { translateTextsWithCache } from '@tonkatsu-translate/pipeline';
+import { makeCacheKey, translateTextsWithCache } from '@tonkatsu-translate/pipeline';
 import {
   cacheModelId,
   createProviderFromSettings,
@@ -46,16 +46,43 @@ export default defineBackground(() => {
       }
       case 'TRANSLATE_BATCH': {
         try {
+          const started = Date.now();
           const settings = await loadSettings();
           const provider = createProviderFromSettings(settings);
           const cache = await getCache();
+          const model = cacheModelId(settings);
+          let cacheHits = 0;
+          let cacheMisses = 0;
+          for (const text of message.texts) {
+            const key = makeCacheKey(
+              text,
+              settings.targetLang,
+              model,
+              settings.sourceLang,
+            );
+            if (cache.get(key) !== undefined) cacheHits += 1;
+            else cacheMisses += 1;
+          }
           const translations = await translateTextsWithCache({
             texts: message.texts,
             targetLang: settings.targetLang,
             sourceLang: settings.sourceLang,
-            model: cacheModelId(settings),
+            model,
             provider,
             cache,
+          });
+          const ms = Date.now() - started;
+          console.log('[TT-PERF][batch]', {
+            engine: settings.engine,
+            model,
+            texts: message.texts.length,
+            cacheHits,
+            cacheMisses,
+            ms,
+            note:
+              cacheMisses > 0
+                ? 'wall time dominated by provider when misses>0'
+                : 'cache-only batch (no provider call)',
           });
           return { translations };
         } catch (error) {

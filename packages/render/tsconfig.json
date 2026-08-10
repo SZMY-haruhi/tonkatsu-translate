@@ -6,10 +6,7 @@
     "strict": true,
     "skipLibCheck": true,
     "noEmit": true,
-    "lib": ["ES2022", "DOM"],
-    "types": ["vitest/globals"]
+    "lib": ["ES2022", "DOM"]
   },
-  "include": ["src"],
-  "exclude": ["src/**/*.test.ts"]
+  "include": ["src"]
 }
-

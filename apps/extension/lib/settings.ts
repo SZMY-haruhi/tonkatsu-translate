@@ -1,5 +1,6 @@
 import {
   DEFAULT_LIBRETRANSLATE_URL,
+  type DeepLPlan,
   type ProviderEngine,
 } from '@tonkatsu-translate/provider';
 import {
@@ -17,6 +18,8 @@ export type Settings = {
   apiKey: string;
   model: string;
   libreBaseUrl: string;
+  deeplApiKey: string;
+  deeplPlan: DeepLPlan;
   targetLang: string;
   sourceLang: 'auto' | string;
   displayMode: DisplayMode;
@@ -27,11 +30,13 @@ export type Settings = {
 };
 
 export const DEFAULT_SETTINGS: Settings = {
-  engine: 'mymemory',
+  engine: 'deepl',
   baseUrl: 'https://api.openai.com/v1',
   apiKey: '',
   model: 'gpt-4o-mini',
   libreBaseUrl: DEFAULT_LIBRETRANSLATE_URL,
+  deeplApiKey: '',
+  deeplPlan: 'free',
   targetLang: 'zh-CN',
   sourceLang: 'auto',
   displayMode: 'bilingual',
@@ -46,13 +51,24 @@ function isDisplayMode(value: unknown): value is DisplayMode {
   return value === 'bilingual' || value === 'replace';
 }
 
+function isDeepLPlan(value: unknown): value is DeepLPlan {
+  return value === 'free' || value === 'pro';
+}
+
 function isEngine(value: unknown): value is ProviderEngine {
   return (
-    value === 'mymemory' ||
+    value === 'deepl' ||
     value === 'libretranslate' ||
     value === 'openai-compatible' ||
     value === 'local-openai'
   );
+}
+
+/** Map removed engines (e.g. MyMemory) onto the new default fast tier. */
+function normalizeEngine(value: unknown): ProviderEngine {
+  if (value === 'mymemory') return 'deepl';
+  if (isEngine(value)) return value;
+  return DEFAULT_SETTINGS.engine;
 }
 
 function isSiteRulesMode(value: unknown): value is SiteRulesMode {
@@ -90,8 +106,18 @@ function mergeDoNotTranslate(input: unknown): string[] {
 
 export function mergeSettings(partial: Partial<Settings> | null | undefined): Settings {
   const input = partial ?? {};
+  const deeplApiKey =
+    typeof input.deeplApiKey === 'string' ? input.deeplApiKey : DEFAULT_SETTINGS.deeplApiKey;
+  let deeplPlan: DeepLPlan = isDeepLPlan(input.deeplPlan)
+    ? input.deeplPlan
+    : DEFAULT_SETTINGS.deeplPlan;
+  // Auto-detect free keys when plan was never set explicitly in older saves.
+  if (!isDeepLPlan(input.deeplPlan) && deeplApiKey.trim().endsWith(':fx')) {
+    deeplPlan = 'free';
+  }
+
   return {
-    engine: isEngine(input.engine) ? input.engine : DEFAULT_SETTINGS.engine,
+    engine: normalizeEngine(input.engine),
     baseUrl: typeof input.baseUrl === 'string' && input.baseUrl.trim()
       ? input.baseUrl.trim()
       : DEFAULT_SETTINGS.baseUrl,
@@ -103,6 +129,8 @@ export function mergeSettings(partial: Partial<Settings> | null | undefined): Se
       typeof input.libreBaseUrl === 'string' && input.libreBaseUrl.trim()
         ? input.libreBaseUrl.trim()
         : DEFAULT_SETTINGS.libreBaseUrl,
+    deeplApiKey,
+    deeplPlan,
     targetLang: typeof input.targetLang === 'string' && input.targetLang.trim()
       ? input.targetLang.trim()
       : DEFAULT_SETTINGS.targetLang,

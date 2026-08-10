@@ -24,13 +24,40 @@
           <label>
             翻译引擎
             <select id="engine" name="engine">
-              <option value="mymemory" selected>免费试用（MyMemory，无需 Key）</option>
+              <option value="deepl" selected>快速 · DeepL（默认）</option>
               <option value="libretranslate">LibreTranslate（建议自建）</option>
-              <option value="openai-compatible">OpenAI 兼容 API</option>
-              <option value="local-openai">本地模型（Ollama / LM Studio）</option>
+              <option value="openai-compatible">质量 · OpenAI 兼容 API</option>
+              <option value="local-openai">质量 · 本地模型（Ollama / LM Studio）</option>
             </select>
           </label>
           <p class="hint" id="engineHint"></p>
+
+          <div id="deeplFields" class="group" hidden>
+            <label>
+              DeepL API Key
+              <input
+                id="deeplApiKey"
+                name="deeplApiKey"
+                type="password"
+                autocomplete="off"
+                placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx:fx"
+              />
+            </label>
+            <label>
+              DeepL 套餐
+              <select id="deeplPlan" name="deeplPlan">
+                <option value="free" selected>Free（api-free.deepl.com）</option>
+                <option value="pro">Pro（api.deepl.com）</option>
+              </select>
+            </label>
+            <p class="hint">
+              在
+              <a href="https://www.deepl.com/pro-api" target="_blank" rel="noreferrer"
+                >DeepL API</a
+              >
+              申请密钥。Free 密钥通常以 <code>:fx</code> 结尾；保存后点「测试连接」。
+            </p>
+          </div>
 
           <div id="libreFields" class="group" hidden>
             <label>
@@ -58,17 +85,19 @@
               <input id="baseUrl" name="baseUrl" type="url" placeholder="https://api.openai.com/v1" />
             </label>
             <label>
-              API 密钥
+              <span class="field-title" id="apiKeyTitle">API 密钥</span>
               <input id="apiKey" name="apiKey" type="password" autocomplete="off" />
             </label>
+            <p class="hint" id="apiKeyHint" hidden></p>
             <label>
               <span class="field-title">
                 模型
                 <button
                   type="button"
                   class="tip"
-                  aria-label="查看 OpenAI 兼容厂商提示"
-                  aria-controls="model-tip"
+                  id="modelTipBtn"
+                  aria-label="查看模型填写说明"
+                  aria-controls="model-tip-openai"
                   aria-expanded="false"
                 >
                   !
@@ -76,11 +105,15 @@
               </span>
               <input id="model" name="model" type="text" placeholder="gpt-4o-mini" />
             </label>
-            <p class="tip-panel" id="model-tip" hidden>
-              兼容任何提供 OpenAI Chat Completions 协议的服务（接口地址填到
-              <code>/v1</code>，再填对应模型名）。常见来源：OpenAI、OpenRouter、DeepSeek、Moonshot（月之暗面）、智谱、通义、Groq、Together、Fireworks；本地可用
-              Ollama / LM Studio（开启 OpenAI 兼容端口）。文档写 “OpenAI Compatible” 的一般可用；Claude /
-              Gemini 原生接口需走兼容网关。不确定时保存后点「测试连接」。
+            <p class="tip-panel" id="model-tip-openai" hidden>
+              兼容任何提供 OpenAI Chat Completions 协议的云服务（接口地址填到
+              <code>/v1</code>，再填对应模型名）。常见来源：OpenAI、OpenRouter、DeepSeek、Moonshot（月之暗面）、智谱、通义、Groq、Together、Fireworks。文档写
+              “OpenAI Compatible” 的一般可用；Claude / Gemini 原生接口需走兼容网关。不确定时保存后点「测试连接」。
+            </p>
+            <p class="tip-panel" id="model-tip-local" hidden>
+              填写本机已拉取 / 已加载的模型名（不是云厂商型号）。Ollama 可用
+              <code>ollama list</code> 查看；LM Studio 在软件里查看当前加载模型。接口需开启 OpenAI 兼容端口（地址通常以
+              <code>/v1</code> 结尾）。填好后保存并点「测试连接」。
             </p>
           </div>
         </section>
@@ -155,7 +188,7 @@
             ></textarea>
           </label>
           <p class="hint">
-            OpenAI 兼容 / 本地模型会把这些词写入提示词。MyMemory / LibreTranslate 不保证专名保留。
+            OpenAI 兼容 / 本地模型会把这些词写入提示词。DeepL / LibreTranslate 不保证专名保留。
           </p>
         </details>
 

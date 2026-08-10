@@ -1,21 +1,25 @@
 import {
   createMemoryCache,
-  makeCacheKey,
   type TranslationCache,
 } from '@tonkatsu-translate/pipeline';
 
 const STORAGE_KEY = 'tonkatsu.translationCache.v1';
-const MAX_PERSISTED = 500;
+/** Persist more entries for long encyclopedia / news sessions. */
+const MAX_PERSISTED = 2000;
+const MEMORY_ENTRIES = 4000;
 
 type PersistedEntry = { key: string; value: string };
 
 export async function createPersistentCache(): Promise<TranslationCache> {
-  const memory = createMemoryCache(1000);
+  const memory = createMemoryCache(MEMORY_ENTRIES);
+  const recentByKey = new Map<string, string>();
+
   try {
     const stored = await browser.storage.local.get(STORAGE_KEY);
     const entries = (stored[STORAGE_KEY] as PersistedEntry[] | undefined) ?? [];
     for (const entry of entries) {
       memory.set(entry.key, entry.value);
+      recentByKey.set(entry.key, entry.value);
     }
   } catch {
     // ignore hydration failures
@@ -31,17 +35,17 @@ export async function createPersistentCache(): Promise<TranslationCache> {
 
   const persist = async () => {
     try {
-      // Recreate from recent memory by probing known keys is hard;
-      // keep a side list via wrapper.
+      const entries: PersistedEntry[] = [];
+      for (const [key, value] of recentByKey) {
+        entries.push({ key, value });
+      }
       await browser.storage.local.set({
-        [STORAGE_KEY]: recentEntries.slice(-MAX_PERSISTED),
+        [STORAGE_KEY]: entries.slice(-MAX_PERSISTED),
       });
     } catch {
       // ignore
     }
   };
-
-  const recentEntries: PersistedEntry[] = [];
 
   return {
     get(key) {
@@ -49,9 +53,13 @@ export async function createPersistentCache(): Promise<TranslationCache> {
     },
     set(key, value) {
       memory.set(key, value);
-      recentEntries.push({ key, value });
-      if (recentEntries.length > MAX_PERSISTED * 2) {
-        recentEntries.splice(0, recentEntries.length - MAX_PERSISTED);
+      // Refresh insertion order for persistence LRU-ish trim.
+      if (recentByKey.has(key)) recentByKey.delete(key);
+      recentByKey.set(key, value);
+      while (recentByKey.size > MAX_PERSISTED) {
+        const oldest = recentByKey.keys().next().value;
+        if (oldest === undefined) break;
+        recentByKey.delete(oldest);
       }
       schedulePersist();
     },
@@ -61,4 +69,4 @@ export async function createPersistentCache(): Promise<TranslationCache> {
   };
 }
 
-export { makeCacheKey };
+export { makeCacheKey } from '@tonkatsu-translate/pipeline';

@@ -17,13 +17,27 @@ import {
   restoreTree,
   shouldSkipBilingualHost,
 } from '@tonkatsu-translate/render';
+import type { ProviderEngine } from '@tonkatsu-translate/provider';
 import type { SessionState } from './messaging';
 import { sendToBackground } from './messaging';
 import { setSessionState } from './session';
 import { looksAlreadyInTargetLang } from './langHeuristics';
+import {
+  resolveSchedulerTuning,
+  type SchedulerTuning,
+} from './schedulerTuning';
+import { isNonTranslatableNoise } from './textNoise';
+import {
+  ensureContentTranslationCache,
+  translateTextsWithContentCache,
+} from './contentTranslateCache';
+import { loadSettings } from './settings';
+import { ttPerfMark, ttPerfReset, ttPerfSummary } from './ttPerf';
 
 type Pending = {
   text: string;
+  /** 0 = in viewport, 1 = near, 2 = far / background. */
+  priority: number;
   resolve: (value: string) => void;
   reject: (reason?: unknown) => void;
 };
@@ -37,24 +51,60 @@ type BatcherOptions = {
   translateBatch: (texts: string[]) => Promise<string[]>;
   isStopped: () => boolean;
   onProgress: (doneDelta: number) => void;
-  /** Wait to merge nearby requests into one API call. */
   coalesceMs?: number;
-  /** Max texts per provider request. */
   maxBatchSize?: number;
-  /** Max parallel provider requests. */
+  maxBatchChars?: number;
   maxInFlight?: number;
 };
 
+function takeBatch(
+  queues: Pending[][],
+  maxBatchSize: number,
+  maxBatchChars: number,
+): Pending[] {
+  const batch: Pending[] = [];
+  let chars = 0;
+  const pullFrom = (queue: Pending[]) => {
+    while (queue.length > 0 && batch.length < maxBatchSize) {
+      const next = queue[0]!;
+      const nextChars = next.text.length;
+      if (batch.length > 0 && chars + nextChars > maxBatchChars) break;
+      queue.shift();
+      batch.push(next);
+      chars += nextChars;
+      if (batch.length === 1 && nextChars >= maxBatchChars) break;
+    }
+  };
+  for (const queue of queues) {
+    if (batch.length >= maxBatchSize) break;
+    if (batch.length > 0 && chars >= maxBatchChars) break;
+    pullFrom(queue);
+  }
+  return batch;
+}
+
+function queueDepth(queues: Pending[][]) {
+  return queues.reduce((n, q) => n + q.length, 0);
+}
+
+function queueChars(queues: Pending[][]) {
+  return queues.reduce(
+    (n, q) => n + q.reduce((m, item) => m + item.text.length, 0),
+    0,
+  );
+}
+
 /**
  * Coalesce many per-node translate calls into fewer provider round-trips,
- * and allow a small number of parallel in-flight batches.
+ * prefer higher-priority (viewport) work, and allow parallel in-flight batches.
  */
 function createBatchedTranslator(options: BatcherOptions) {
   const coalesceMs = options.coalesceMs ?? 100;
   const maxBatchSize = options.maxBatchSize ?? 16;
+  const maxBatchChars = options.maxBatchChars ?? 2000;
   const maxInFlight = Math.max(1, options.maxInFlight ?? 3);
 
-  let queue: Pending[] = [];
+  const queues: Pending[][] = [[], [], []];
   let timer: number | null = null;
   let inFlight = 0;
 
@@ -73,6 +123,7 @@ function createBatchedTranslator(options: BatcherOptions) {
         return;
       }
       const translations = await options.translateBatch(batch.map((item) => item.text));
+      // Resolve individually so DOM can paint progressively as each item settles.
       batch.forEach((item, index) => {
         item.resolve(translations[index] ?? item.text);
       });
@@ -81,7 +132,7 @@ function createBatchedTranslator(options: BatcherOptions) {
       batch.forEach((item) => item.reject(error));
     } finally {
       inFlight -= 1;
-      if (queue.length > 0) void pump();
+      if (queueDepth(queues) > 0) void pump();
     }
   };
 
@@ -89,28 +140,32 @@ function createBatchedTranslator(options: BatcherOptions) {
     while (
       !options.isStopped() &&
       inFlight < maxInFlight &&
-      queue.length > 0
+      queueDepth(queues) > 0
     ) {
-      const batch = queue.splice(0, maxBatchSize);
+      const batch = takeBatch(queues, maxBatchSize, maxBatchChars);
+      if (batch.length === 0) break;
       inFlight += 1;
       void flushOne(batch);
     }
   };
 
-  return (text: string) =>
+  return (text: string, priority = 1) =>
     new Promise<string>((resolve, reject) => {
       if (options.isStopped()) {
         reject(new Error('已停止'));
         return;
       }
-      if (!text.trim()) {
+      if (!text.trim() || isNonTranslatableNoise(text)) {
         resolve(text);
         return;
       }
-      queue.push({ text, resolve, reject });
+      const tier = Math.min(2, Math.max(0, Math.floor(priority)));
+      queues[tier]!.push({ text, priority: tier, resolve, reject });
       schedule();
-      // If a slot is free and queue is already large, flush without waiting full coalesce.
-      if (queue.length >= maxBatchSize && inFlight < maxInFlight) {
+      if (
+        (queueDepth(queues) >= maxBatchSize || queueChars(queues) >= maxBatchChars) &&
+        inFlight < maxInFlight
+      ) {
         if (timer != null) {
           window.clearTimeout(timer);
           timer = null;
@@ -118,6 +173,23 @@ function createBatchedTranslator(options: BatcherOptions) {
         void pump();
       }
     });
+}
+
+function batcherFromTuning(
+  tuning: SchedulerTuning,
+  options: {
+    translateBatch: (texts: string[]) => Promise<string[]>;
+    isStopped: () => boolean;
+    onProgress: (doneDelta: number) => void;
+  },
+) {
+  return createBatchedTranslator({
+    ...options,
+    coalesceMs: tuning.coalesceMs,
+    maxBatchSize: tuning.maxBatchSize,
+    maxBatchChars: tuning.maxBatchChars,
+    maxInFlight: tuning.maxInFlight,
+  });
 }
 
 function ensureBilingualStyles() {
@@ -140,35 +212,74 @@ function isNearViewport(el: Element, margin = 280): boolean {
   return rect.bottom >= -margin && rect.top <= window.innerHeight + margin;
 }
 
+function viewportPriority(el: Element): number {
+  if (isNearViewport(el, 0)) return 0;
+  if (isNearViewport(el, 280)) return 1;
+  return 2;
+}
+
+function createProgressEmitter(
+  isStopped: () => boolean,
+  onProgress: (state: SessionState) => void,
+) {
+  let done = 0;
+  let total = 0;
+  let timer: number | null = null;
+
+  const flush = () => {
+    timer = null;
+    if (isStopped()) return;
+    setSessionState({ status: 'running', done, total: Math.max(total, done) });
+    onProgress({ status: 'running', done, total: Math.max(total, done) });
+  };
+
+  const schedule = () => {
+    if (timer != null) return;
+    timer = window.setTimeout(flush, 120);
+  };
+
+  return {
+    bumpTotal(delta = 1) {
+      total += delta;
+      schedule();
+    },
+    bumpDone(delta: number) {
+      done += delta;
+      schedule();
+    },
+    emitNow(state: SessionState) {
+      if (timer != null) {
+        window.clearTimeout(timer);
+        timer = null;
+      }
+      setSessionState(state);
+      onProgress(state);
+    },
+  };
+}
+
 function startBilingualTranslation(options: {
   translateBatch: (texts: string[]) => Promise<string[]>;
   onProgress: (state: SessionState) => void;
   maxConcurrency?: number;
   targetLang?: string;
+  engine?: ProviderEngine;
 }): PageSessionControls {
   let stopped = false;
-  let done = 0;
-  let total = 0;
   const targetLang = options.targetLang?.trim() || 'zh-CN';
   const lastText = new WeakMap<Element, string>();
   const queued = new WeakSet<Element>();
+  const tuning = resolveSchedulerTuning(
+    options.engine ?? 'deepl',
+    'bilingual',
+    options.maxConcurrency,
+  );
+  const progress = createProgressEmitter(() => stopped, options.onProgress);
 
-  const emit = (state: SessionState) => {
-    setSessionState(state);
-    options.onProgress(state);
-  };
-
-  const translateOne = createBatchedTranslator({
+  const translateOne = batcherFromTuning(tuning, {
     translateBatch: options.translateBatch,
     isStopped: () => stopped,
-    coalesceMs: 120,
-    // Smaller batches keep long encyclopedia paragraphs inside model JSON budgets.
-    maxBatchSize: 8,
-    maxInFlight: options.maxConcurrency ?? 3,
-    onProgress: (delta) => {
-      done += delta;
-      if (!stopped) emit({ status: 'running', done, total: Math.max(total, done) });
-    },
+    onProgress: (delta) => progress.bumpDone(delta),
   });
 
   ensureBilingualStyles();
@@ -180,11 +291,12 @@ function startBilingualTranslation(options: {
     queued.delete(el);
   };
 
-  const processElement = async (el: Element) => {
+  const processElement = async (el: Element, priority = viewportPriority(el)) => {
     if (stopped) return;
     if (shouldSkipBilingualHost(el) || el.closest(BILINGUAL_SKIP_CLOSEST)) return;
     const text = collectBlockText(el);
     if (text.length < 2) return;
+    if (isNonTranslatableNoise(text)) return;
     if (looksAlreadyInTargetLang(text, targetLang)) return;
     if (el.getAttribute(BILINGUAL_ATTR) === '1' && lastText.get(el) === text) return;
     if (queued.has(el) && lastText.get(el) === text) return;
@@ -192,16 +304,16 @@ function startBilingualTranslation(options: {
 
     queued.add(el);
     lastText.set(el, text);
-    total += 1;
-    emit({ status: 'running', done, total });
+    progress.bumpTotal(1);
     try {
-      const translated = await translateOne(text);
+      const translated = await translateOne(text, priority);
       if (stopped) return;
       if (collectBlockText(el) !== text) {
         clearHost(el);
         observer.observe(el);
         return;
       }
+      // Progressive paint: insert as soon as this block's batch item resolves.
       const probe = document.createTextNode('');
       el.appendChild(probe);
       applyBilingual(probe, translated);
@@ -211,7 +323,7 @@ function startBilingualTranslation(options: {
     } catch (error) {
       clearHost(el);
       if (!stopped) {
-        emit({
+        progress.emitNow({
           status: 'error',
           message: error instanceof Error ? error.message : '翻译失败',
         });
@@ -223,11 +335,13 @@ function startBilingualTranslation(options: {
     (entries) => {
       for (const entry of entries) {
         if (entry.isIntersecting && entry.target instanceof Element) {
-          void processElement(entry.target);
+          const el = entry.target;
+          const priority = entry.intersectionRatio > 0.15 ? 0 : 1;
+          void processElement(el, priority);
         }
       }
     },
-    { rootMargin: '280px' },
+    { rootMargin: '280px', threshold: [0, 0.15, 0.5] },
   );
 
   const watch = (root: ParentNode) => {
@@ -240,7 +354,7 @@ function startBilingualTranslation(options: {
       isLeafTextBlock(el)
     ) {
       observer.observe(el);
-      if (isNearViewport(el)) void processElement(el);
+      if (isNearViewport(el)) void processElement(el, viewportPriority(el));
     }
   };
 
@@ -252,7 +366,7 @@ function startBilingualTranslation(options: {
         maybeObserve(node);
         watch(node);
         collectTranslatableBlocks(node).forEach((el) => {
-          if (isNearViewport(el)) void processElement(el);
+          if (isNearViewport(el)) void processElement(el, viewportPriority(el));
         });
       });
       if (mutation.type === 'characterData') {
@@ -263,18 +377,29 @@ function startBilingualTranslation(options: {
         if (host instanceof Element && host.getAttribute(BILINGUAL_ATTR) === '1') {
           clearHost(host);
           observer.observe(host);
-          if (isNearViewport(host)) void processElement(host);
+          if (isNearViewport(host)) void processElement(host, viewportPriority(host));
         }
       }
     }
   });
 
-  emit({ status: 'running', done: 0, total: 0 });
+  progress.emitNow({ status: 'running', done: 0, total: 0 });
+  ttPerfReset();
+  const scanStarted = performance.now();
   watch(document);
-  // Eagerly queue the first screen so requests coalesce into few API calls.
-  collectTranslatableBlocks(document).forEach((el) => {
-    if (isNearViewport(el)) void processElement(el);
+  const near = collectTranslatableBlocks(document);
+  const scanMs = performance.now() - scanStarted;
+  ttPerfMark('local', 'initial DOM scan + observe', scanMs, {
+    blocks: near.length,
   });
+  // Viewport-first: in-view (0) then near-margin (1).
+  near
+    .map((el) => ({ el, priority: viewportPriority(el) }))
+    .filter((item) => item.priority <= 1)
+    .sort((a, b) => a.priority - b.priority)
+    .forEach((item) => {
+      void processElement(item.el, item.priority);
+    });
   mutationObserver.observe(document.documentElement, {
     childList: true,
     subtree: true,
@@ -286,7 +411,8 @@ function startBilingualTranslation(options: {
       stopped = true;
       observer.disconnect();
       mutationObserver.disconnect();
-      emit({ status: 'idle' });
+      ttPerfSummary('stop');
+      progress.emitNow({ status: 'idle' });
     },
     restore() {
       stopped = true;
@@ -294,7 +420,8 @@ function startBilingualTranslation(options: {
       mutationObserver.disconnect();
       restoreBilingual(document);
       document.getElementById('tt-bilingual-style')?.remove();
-      emit({ status: 'idle' });
+      ttPerfSummary('restore');
+      progress.emitNow({ status: 'idle' });
     },
   };
 }
@@ -303,32 +430,27 @@ function startReplaceTranslation(options: {
   translateBatch: (texts: string[]) => Promise<string[]>;
   onProgress: (state: SessionState) => void;
   maxConcurrency?: number;
+  engine?: ProviderEngine;
 }): PageSessionControls {
   let stopped = false;
-  let done = 0;
-  let total = 0;
+  const tuning = resolveSchedulerTuning(
+    options.engine ?? 'deepl',
+    'replace',
+    options.maxConcurrency,
+  );
+  const progress = createProgressEmitter(() => stopped, options.onProgress);
 
-  const emit = (state: SessionState) => {
-    setSessionState(state);
-    options.onProgress(state);
-  };
-
-  const translateCallback = createBatchedTranslator({
+  const translateCallback = batcherFromTuning(tuning, {
     translateBatch: options.translateBatch,
     isStopped: () => stopped,
-    coalesceMs: 120,
-    maxBatchSize: 16,
-    maxInFlight: options.maxConcurrency ?? 3,
-    onProgress: (delta) => {
-      done += delta;
-      if (!stopped) emit({ status: 'running', done, total: Math.max(total, done) });
-    },
+    onProgress: (delta) => progress.bumpDone(delta),
   });
 
   const nodesTranslator = new NodesTranslator(async (text, _score) => {
-    total += 1;
-    emit({ status: 'running', done, total });
-    return translateCallback(text);
+    if (isNonTranslatableNoise(text)) return text;
+    progress.bumpTotal(1);
+    // IntersectionScheduler already defers off-screen nodes; treat as high priority.
+    return translateCallback(text, 0);
   });
 
   const domTranslator = new DOMTranslator(nodesTranslator, {
@@ -353,11 +475,11 @@ function startReplaceTranslation(options: {
 
   const persistent = new PersistentDOMTranslator(domTranslator);
   const root = document.documentElement;
-  emit({ status: 'running', done: 0, total: 0 });
+  progress.emitNow({ status: 'running', done: 0, total: 0 });
   try {
     persistent.translate(root);
   } catch (error) {
-    emit({
+    progress.emitNow({
       status: 'error',
       message: error instanceof Error ? error.message : '无法开始翻译',
     });
@@ -380,7 +502,7 @@ function startReplaceTranslation(options: {
     stop() {
       stopped = true;
       disconnectObservers();
-      emit({ status: 'idle' });
+      progress.emitNow({ status: 'idle' });
     },
     restore() {
       stopped = true;
@@ -390,7 +512,7 @@ function startReplaceTranslation(options: {
         // Already torn down / never observed — still clear best-effort.
         disconnectObservers();
       }
-      emit({ status: 'idle' });
+      progress.emitNow({ status: 'idle' });
     },
   };
 }
@@ -401,6 +523,7 @@ export function startPageTranslation(options: {
   onProgress: (state: SessionState) => void;
   maxConcurrency?: number;
   targetLang?: string;
+  engine?: ProviderEngine;
 }): PageSessionControls {
   if (options.mode === 'bilingual') {
     return startBilingualTranslation(options);
@@ -408,8 +531,19 @@ export function startPageTranslation(options: {
   return startReplaceTranslation(options);
 }
 
-export async function translateBatchViaBackground(texts: string[]): Promise<string[]> {
+async function translateBatchRaw(texts: string[]): Promise<string[]> {
+  const started = performance.now();
   const response = await sendToBackground({ type: 'TRANSLATE_BATCH', texts });
+  ttPerfMark('send', 'batch RTT (includes API wait in background)', performance.now() - started, {
+    texts: texts.length,
+  });
   if ('translations' in response) return response.translations;
   throw new Error(response.error || '翻译失败');
+}
+
+/** Content-cache aware batch translate (Task D short-circuit). */
+export async function translateBatchViaBackground(texts: string[]): Promise<string[]> {
+  const settings = await loadSettings();
+  ensureContentTranslationCache(settings);
+  return translateTextsWithContentCache(texts, translateBatchRaw);
 }

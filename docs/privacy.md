@@ -18,9 +18,12 @@ No project-operated server receives your settings, keys, or page text.
 When you translate (full page or selection):
 
 1. Selected or discovered page text is sent from the **extension background** to the endpoint implied by your engine:
-   - **MyMemory** (default demo): their public API (quota / quality limits)
+   - **DeepL** (default fast tier): `api-free.deepl.com` or `api.deepl.com` with your API key
    - **LibreTranslate**: the base URL you set (often localhost)
-   - **OpenAI-compatible**: the base URL + key + model you set
+   - **OpenAI-compatible / local**: the base URL + key + model you set
+
+There is **no** project-operated translation proxy and **no** MyMemory (or similar anonymous free MT) path.
+
 2. The response text is written back into the page DOM (bilingual insert or replace) and may be cached locally.
 
 Page HTML is not uploaded as a whole document; the extension sends text units needed for translation.

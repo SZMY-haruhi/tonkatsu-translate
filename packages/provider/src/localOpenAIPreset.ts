@@ -20,10 +20,15 @@ export function applyLocalPreset<T extends Partial<ProviderSettings>>(
 
   return {
     ...partial,
-    engine: 'local-openai',
+    engine: 'local-openai' as const,
     baseUrl,
     // Local daemons usually ignore auth; keep empty unless user already set one.
     apiKey: typeof partial?.apiKey === 'string' ? partial.apiKey : '',
     model,
+  } as T & {
+    engine: 'local-openai'
+    baseUrl: string
+    apiKey: string
+    model: string
   }
 }

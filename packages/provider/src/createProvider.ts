@@ -1,10 +1,10 @@
+import { createDeepLProvider, type DeepLPlan } from './deepl'
 import { createLibreTranslateProvider, DEFAULT_LIBRETRANSLATE_URL } from './libreTranslate'
-import { createMyMemoryProvider } from './myMemory'
 import { createOpenAICompatibleProvider } from './openaiCompatible'
 import type { TranslationProvider } from './types'
 
 export type ProviderEngine =
-  | 'mymemory'
+  | 'deepl'
   | 'libretranslate'
   | 'openai-compatible'
   | 'local-openai'
@@ -15,12 +15,19 @@ export type ProviderSettings = {
   apiKey: string
   model: string
   libreBaseUrl?: string
+  /** DeepL API key (BYOK). Kept separate from OpenAI-compatible apiKey. */
+  deeplApiKey?: string
+  deeplPlan?: DeepLPlan
   maxConcurrency?: number
   doNotTranslate?: string[]
 }
 
 export function cacheModelId(settings: ProviderSettings): string {
-  if (settings.engine === 'mymemory') return 'mymemory'
+  if (settings.engine === 'deepl') {
+    const key = settings.deeplApiKey ?? ''
+    const plan = settings.deeplPlan ?? (key.trim().endsWith(':fx') ? 'free' : 'pro')
+    return `deepl:${plan}`
+  }
   if (settings.engine === 'libretranslate') {
     return `libre:${settings.libreBaseUrl?.trim() || DEFAULT_LIBRETRANSLATE_URL}`
   }
@@ -33,9 +40,10 @@ export function cacheModelId(settings: ProviderSettings): string {
 export function createProviderFromSettings(
   settings: ProviderSettings,
 ): TranslationProvider {
-  if (settings.engine === 'mymemory') {
-    return createMyMemoryProvider({
-      concurrency: settings.maxConcurrency ?? 3,
+  if (settings.engine === 'deepl') {
+    return createDeepLProvider({
+      apiKey: settings.deeplApiKey ?? '',
+      plan: settings.deeplPlan,
     })
   }
 
