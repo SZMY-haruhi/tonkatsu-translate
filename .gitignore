@@ -21,7 +21,8 @@ aikido-batch*.json
 .aikido-scan-payload.json
 # Local-only development / agent artifacts (not part of product source)
 docs/qa/
-docs/superpowers/
+scripts/perf-translate-bench.mjs
+scripts/check-scheduler-noise.mjs
 scripts/smoke-extension.mjs
 **/*.test.ts
 **/vitest.config.ts

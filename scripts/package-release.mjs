@@ -101,7 +101,6 @@ function shouldCopySource(relPath) {
   if (norm.startsWith('apps/extension/.wxt/')) return false
   if (norm.startsWith('.smoke')) return false
   if (/(^|\/)docs\/qa(\/|$)/.test(norm)) return false
-  if (/(^|\/)docs\/superpowers(\/|$)/.test(norm)) return false
   if (/(^|\/)\.env($|\.)/i.test(norm)) return false
   if (/\.env$/i.test(norm)) return false
   if (/test-modelskey\.env$/i.test(norm)) return false
@@ -131,7 +130,7 @@ function assertCleanZipListing(entries, label) {
     const norm = e.replace(/\\/g, '/')
     return (
       FORBIDDEN_NAME.test(norm) ||
-      /(^|\/)docs\/(qa|superpowers)(\/|$)/i.test(norm) ||
+      /(^|\/)docs\/qa(\/|$)/i.test(norm) ||
       /smoke-extension|\.env|test-modelskey/i.test(norm)
     )
   })
