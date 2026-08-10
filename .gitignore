@@ -1,0 +1,27 @@
+node_modules
+dist
+.output
+.wxt
+release
+*.log
+.DS_Store
+# Secrets / local credentials — never commit
+.env
+.env.*
+*.env
+!*.env.example
+test-modelskey.env
+.smoke-chrome-profile
+.smoke-ext
+.smoke-targets.log
+.smoke-shots/
+**/tonkatsu-smoke*/
+.aikido-*.json
+aikido-batch*.json
+.aikido-scan-payload.json
+# Local-only development / agent artifacts (not part of product source)
+docs/qa/
+docs/superpowers/
+scripts/smoke-extension.mjs
+**/*.test.ts
+**/vitest.config.ts

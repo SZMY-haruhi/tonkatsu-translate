@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="manifest.open_in_tab" content="true" />
+    <title>炸猪排翻译 · 控制面板</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <main class="panel">
+      <header class="brand">
+        <img class="brand__mark" src="/icon-128.png" alt="炸猪排翻译" width="56" height="56" />
+        <div class="brand__text">
+          <p class="brand__eyebrow">控制面板</p>
+          <h1>炸猪排翻译</h1>
+          <p class="lead">独立窗口配置引擎与语言。顶栏 / 标签栏请使用「替换」模式。</p>
+        </div>
+      </header>
+
+      <form id="settings-form" class="form">
+        <section class="section">
+          <h2 class="section__title">引擎</h2>
+          <label>
+            翻译引擎
+            <select id="engine" name="engine">
+              <option value="mymemory" selected>免费试用（MyMemory，无需 Key）</option>
+              <option value="libretranslate">LibreTranslate（建议自建）</option>
+              <option value="openai-compatible">OpenAI 兼容 API</option>
+              <option value="local-openai">本地模型（Ollama / LM Studio）</option>
+            </select>
+          </label>
+          <p class="hint" id="engineHint"></p>
+
+          <div id="libreFields" class="group" hidden>
+            <label>
+              LibreTranslate 地址
+              <input
+                id="libreBaseUrl"
+                name="libreBaseUrl"
+                type="url"
+                placeholder="http://localhost:5000"
+              />
+            </label>
+          </div>
+
+          <div id="openaiFields" class="group" hidden>
+            <div id="localPresets" class="preset-row" hidden>
+              <button type="button" class="ghost" id="presetOllama" data-preset="ollama">
+                填入 Ollama
+              </button>
+              <button type="button" class="ghost" id="presetLmStudio" data-preset="lmstudio">
+                填入 LM Studio
+              </button>
+            </div>
+            <label>
+              接口地址
+              <input id="baseUrl" name="baseUrl" type="url" placeholder="https://api.openai.com/v1" />
+            </label>
+            <label>
+              API 密钥
+              <input id="apiKey" name="apiKey" type="password" autocomplete="off" />
+            </label>
+            <label>
+              <span class="field-title">
+                模型
+                <button
+                  type="button"
+                  class="tip"
+                  aria-label="查看 OpenAI 兼容厂商提示"
+                  aria-controls="model-tip"
+                  aria-expanded="false"
+                >
+                  !
+                </button>
+              </span>
+              <input id="model" name="model" type="text" placeholder="gpt-4o-mini" />
+            </label>
+            <p class="tip-panel" id="model-tip" hidden>
+              兼容任何提供 OpenAI Chat Completions 协议的服务（接口地址填到
+              <code>/v1</code>，再填对应模型名）。常见来源：OpenAI、OpenRouter、DeepSeek、Moonshot（月之暗面）、智谱、通义、Groq、Together、Fireworks；本地可用
+              Ollama / LM Studio（开启 OpenAI 兼容端口）。文档写 “OpenAI Compatible” 的一般可用；Claude /
+              Gemini 原生接口需走兼容网关。不确定时保存后点「测试连接」。
+            </p>
+          </div>
+        </section>
+
+        <section class="section">
+          <h2 class="section__title">语言与显示</h2>
+          <div class="grid-2">
+            <label>
+              源语言
+              <select id="sourceLang" name="sourceLang">
+                <option value="auto" selected>自动检测</option>
+                <option value="en">English</option>
+                <option value="zh-CN">中文（简体）</option>
+                <option value="zh-TW">中文（繁体）</option>
+                <option value="ja">日本語</option>
+                <option value="ko">한국어</option>
+              </select>
+            </label>
+            <label>
+              目标语言
+              <select id="targetLang" name="targetLang">
+                <option value="zh-CN" selected>中文（简体）</option>
+                <option value="zh-TW">中文（繁体）</option>
+                <option value="en">English</option>
+                <option value="ja">日本語</option>
+                <option value="ko">한국어</option>
+              </select>
+            </label>
+          </div>
+          <label>
+            显示模式
+            <select id="displayMode" name="displayMode">
+              <option value="bilingual">双语（正文插入；跳过顶栏以防溢出）</option>
+              <option value="replace">替换原文（含顶栏 / 标签栏）</option>
+            </select>
+          </label>
+        </section>
+
+        <section class="section">
+          <h2 class="section__title">站点规则</h2>
+          <label>
+            模式
+            <select id="siteRulesMode" name="siteRulesMode">
+              <option value="off" selected>关闭（所有站点可用）</option>
+              <option value="denylist">拒绝列表（下列站点禁用）</option>
+              <option value="allowlist">允许列表（仅下列站点可用）</option>
+            </select>
+          </label>
+          <label>
+            主机列表（每行一个；支持 <code>*.example.com</code>）
+            <textarea
+              id="siteRulesHosts"
+              name="siteRulesHosts"
+              rows="4"
+              placeholder="example.com&#10;*.hltv.org"
+            ></textarea>
+          </label>
+          <p class="hint">
+            被规则禁用的站点：侧边气泡与划词翻译均不可用。修改后请保存并刷新目标网页。
+          </p>
+        </section>
+
+        <details class="advanced">
+          <summary>高级 · 保留词（专名 / 术语）</summary>
+          <label>
+            保留词列表（每行一个，翻译时尽量保持原文）
+            <textarea
+              id="doNotTranslate"
+              name="doNotTranslate"
+              rows="4"
+              placeholder="Vitality&#10;s1mple&#10;NaVi"
+            ></textarea>
+          </label>
+          <p class="hint">
+            OpenAI 兼容 / 本地模型会把这些词写入提示词。MyMemory / LibreTranslate 不保证专名保留。
+          </p>
+        </details>
+
+        <div class="actions">
+          <button type="submit">保存</button>
+          <button type="button" id="test" class="secondary">测试连接</button>
+        </div>
+        <p class="status" id="status" aria-live="polite"></p>
+      </form>
+    </main>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>炸猪排翻译</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <main class="panel">
+      <header class="brand">
+        <img class="brand__mark" src="/icon-48.png" alt="" width="28" height="28" />
+        <h1>炸猪排翻译</h1>
+      </header>
+      <p class="status" id="status">就绪</p>
+
+      <label class="field">
+        模式
+        <select id="displayMode">
+          <option value="bilingual">双语（正文）</option>
+          <option value="replace">替换（含顶栏）</option>
+        </select>
+      </label>
+
+      <div class="actions">
+        <button type="button" id="translate">翻译</button>
+        <button type="button" id="stop" class="secondary">停止</button>
+        <button type="button" id="restore" class="secondary">还原</button>
+      </div>
+      <button type="button" id="open-options" class="linkish">打开控制面板</button>
+    </main>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>
