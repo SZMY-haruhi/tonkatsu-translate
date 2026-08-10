@@ -7,7 +7,7 @@ import {
 } from '../lib/pageSession';
 import { bindSelectionTranslate } from '../lib/selection';
 import { getSessionState, setSessionState } from '../lib/session';
-import { loadSettings } from '../lib/settings';
+import { loadPublicSettings } from '../lib/settings';
 import { siteBlockedMessage } from '../lib/siteRules';
 import { resetContentTranslationCache } from '../lib/contentTranslateCache';
 
@@ -31,7 +31,7 @@ export default defineContentScript({
     };
 
     const refreshHostGate = async () => {
-      const settings = await loadSettings();
+      const settings = await loadPublicSettings();
       hostBlocked = siteBlockedMessage(location.hostname, settings.siteRules);
       setDockBlocked(hostBlocked);
       return hostBlocked;
@@ -48,7 +48,7 @@ export default defineContentScript({
         // do not stack bilingual inserts on top of replace text (or vice versa).
         controls?.restore();
         controls = null;
-        const settings = await loadSettings();
+        const settings = await loadPublicSettings();
         resetContentTranslationCache(settings);
         controls = startPageTranslation({
           mode: settings.displayMode,
@@ -97,7 +97,7 @@ export default defineContentScript({
     bindSelectionTranslate({
       enabled: async () => {
         if (hostBlocked) return false;
-        const settings = await loadSettings();
+        const settings = await loadPublicSettings();
         return settings.selectionTranslateEnabled;
       },
       translate: async (text) => {

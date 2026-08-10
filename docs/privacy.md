@@ -6,8 +6,8 @@
 
 | Data | Where | Purpose |
 |------|--------|---------|
-| Settings (engine, base URL, model, languages, display mode, concurrency) | `chrome.storage.sync` when available, else `chrome.storage.local` | Persist configuration |
-| API key (if you enter one) | Same settings storage | Authenticate to **your** provider |
+| API key (if you enter one) | `chrome.storage.local` only (`tonkatsu.secrets`) | Authenticate to **your** provider; never synced via Chrome account |
+| Other settings | `chrome.storage.sync` when available, else `chrome.storage.local` | Persist configuration without secrets |
 | Translation cache (source→target pairs) | `chrome.storage.local` (capped) | Reduce repeat API calls |
 | Edge-dock position (side / height ratio) | `chrome.storage.local` | Remember the floating control across sites |
 

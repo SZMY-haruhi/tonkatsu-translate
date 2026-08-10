@@ -1,6 +1,6 @@
 import { sendToActiveTab } from '../../lib/messaging';
 import { openControlPanel } from '../../lib/openControlPanel';
-import { loadSettings, saveSettings, type DisplayMode } from '../../lib/settings';
+import { loadPublicSettings, loadSecrets, saveSettings, type DisplayMode } from '../../lib/settings';
 
 const status = document.querySelector<HTMLParagraphElement>('#status');
 const translateBtn = document.querySelector<HTMLButtonElement>('#translate');
@@ -33,7 +33,7 @@ async function refreshSession() {
 }
 
 async function init() {
-  const settings = await loadSettings();
+  const settings = await loadPublicSettings();
   if (modeSelect) modeSelect.value = settings.displayMode;
   await refreshSession();
   window.setInterval(() => {
@@ -42,9 +42,12 @@ async function init() {
 }
 
 modeSelect?.addEventListener('change', async () => {
-  const settings = await loadSettings();
+  const [publicSettings, secrets] = await Promise.all([
+    loadPublicSettings(),
+    loadSecrets(),
+  ]);
   const displayMode = (modeSelect.value === 'replace' ? 'replace' : 'bilingual') as DisplayMode;
-  await saveSettings({ ...settings, displayMode });
+  await saveSettings({ ...publicSettings, ...secrets, displayMode });
   // Clear any in-page session so the next translate starts clean in the new mode.
   try {
     await sendToActiveTab({ type: 'PAGE_RESTORE' });

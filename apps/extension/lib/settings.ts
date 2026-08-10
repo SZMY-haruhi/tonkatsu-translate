@@ -15,6 +15,12 @@ import {
 export type DisplayMode = 'bilingual' | 'replace';
 export type { ProviderEngine, SiteRules, SiteRulesMode };
 
+export type SettingsSecrets = {
+  apiKey: string;
+  localApiKey: string;
+  deeplApiKey: string;
+};
+
 export type Settings = {
   engine: ProviderEngine;
   baseUrl: string;
@@ -40,6 +46,14 @@ export type Settings = {
   selectionTranslateEnabled: boolean;
 };
 
+export type PublicSettings = Omit<Settings, keyof SettingsSecrets>;
+
+export const DEFAULT_SECRETS: SettingsSecrets = {
+  apiKey: '',
+  localApiKey: '',
+  deeplApiKey: '',
+};
+
 export const DEFAULT_SETTINGS: Settings = {
   engine: 'deepl',
   baseUrl: 'https://api.openai.com/v1',
@@ -56,7 +70,6 @@ export const DEFAULT_SETTINGS: Settings = {
   sourceLang: 'auto',
   displayMode: 'replace',
   maxConcurrency: 4,
-  /** Off by default — enable in options; when on, Alt+mouseup triggers (see selection.ts). */
   selectionTranslateEnabled: false,
   siteRules: { ...DEFAULT_SITE_RULES, hosts: [] },
   siteListMode: 'allowlist',
@@ -64,6 +77,7 @@ export const DEFAULT_SETTINGS: Settings = {
 };
 
 const STORAGE_KEY = 'tonkatsu.settings';
+const SECRETS_KEY = 'tonkatsu.secrets';
 
 function isDisplayMode(value: unknown): value is DisplayMode {
   return value === 'bilingual' || value === 'replace';
@@ -124,15 +138,43 @@ function mergeDoNotTranslate(input: unknown): string[] {
   return out;
 }
 
+function pickSecrets(input: Partial<Settings> | null | undefined): SettingsSecrets {
+  const source = input ?? {};
+  return {
+    apiKey: typeof source.apiKey === 'string' ? source.apiKey : DEFAULT_SECRETS.apiKey,
+    localApiKey:
+      typeof source.localApiKey === 'string'
+        ? source.localApiKey
+        : DEFAULT_SECRETS.localApiKey,
+    deeplApiKey:
+      typeof source.deeplApiKey === 'string'
+        ? source.deeplApiKey
+        : DEFAULT_SECRETS.deeplApiKey,
+  };
+}
+
+export function stripSecrets(settings: Settings): PublicSettings {
+  const { apiKey: _a, localApiKey: _l, deeplApiKey: _d, ...publicSettings } = settings;
+  return publicSettings;
+}
+
+function hasLegacySecretFields(raw: Partial<Settings> | undefined): boolean {
+  if (!raw) return false;
+  return (
+    (typeof raw.apiKey === 'string' && raw.apiKey.length > 0) ||
+    (typeof raw.localApiKey === 'string' && raw.localApiKey.length > 0) ||
+    (typeof raw.deeplApiKey === 'string' && raw.deeplApiKey.length > 0)
+  );
+}
+
 export function mergeSettings(partial: Partial<Settings> | null | undefined): Settings {
   const input = partial ?? {};
   const engine = normalizeEngine(input.engine);
-  const deeplApiKey =
-    typeof input.deeplApiKey === 'string' ? input.deeplApiKey : DEFAULT_SETTINGS.deeplApiKey;
+  const secrets = pickSecrets(input);
+  const deeplApiKey = secrets.deeplApiKey;
   let deeplPlan: DeepLPlan = isDeepLPlan(input.deeplPlan)
     ? input.deeplPlan
     : DEFAULT_SETTINGS.deeplPlan;
-  // Auto-detect free keys when plan was never set explicitly in older saves.
   if (!isDeepLPlan(input.deeplPlan) && deeplApiKey.trim().endsWith(':fx')) {
     deeplPlan = 'free';
   }
@@ -236,7 +278,7 @@ export function mergeSettings(partial: Partial<Settings> | null | undefined): Se
   };
 }
 
-async function storageArea() {
+async function publicStorageArea() {
   try {
     if (browser.storage?.sync) return browser.storage.sync;
   } catch {
@@ -245,16 +287,60 @@ async function storageArea() {
   return browser.storage.local;
 }
 
-export async function loadSettings(): Promise<Settings> {
-  const area = await storageArea();
+async function migrateLegacyKeysIfNeeded(
+  raw: Partial<Settings> | undefined,
+  area: chrome.storage.StorageArea,
+): Promise<void> {
+  if (!hasLegacySecretFields(raw)) return;
+
+  const stored = await browser.storage.local.get(SECRETS_KEY);
+  const existing = (stored[SECRETS_KEY] as Partial<SettingsSecrets> | undefined) ?? {};
+  const migrated = pickSecrets({ ...existing, ...raw });
+  await browser.storage.local.set({ [SECRETS_KEY]: migrated });
+
+  const cleaned = stripSecrets(mergeSettings({ ...raw, ...migrated }));
+  await area.set({ [STORAGE_KEY]: cleaned });
+}
+
+export async function loadSecrets(): Promise<SettingsSecrets> {
+  const result = await browser.storage.local.get(SECRETS_KEY);
+  return pickSecrets(result[SECRETS_KEY] as Partial<SettingsSecrets> | undefined);
+}
+
+/** Settings without API keys — safe for content scripts and popup reads. */
+export async function loadPublicSettings(): Promise<PublicSettings> {
+  const area = await publicStorageArea();
   const result = await area.get(STORAGE_KEY);
   const raw = result[STORAGE_KEY] as Partial<Settings> | undefined;
-  return mergeSettings(raw);
+  await migrateLegacyKeysIfNeeded(raw, area);
+
+  const refreshed = await area.get(STORAGE_KEY);
+  const publicRaw = refreshed[STORAGE_KEY] as Partial<PublicSettings> | undefined;
+  return stripSecrets(
+    mergeSettings({
+      ...DEFAULT_SECRETS,
+      ...publicRaw,
+    }),
+  );
+}
+
+/** Full settings including secrets — background and options only. */
+export async function loadSettings(): Promise<Settings> {
+  const [publicSettings, secrets] = await Promise.all([
+    loadPublicSettings(),
+    loadSecrets(),
+  ]);
+  return { ...publicSettings, ...secrets };
 }
 
 export async function saveSettings(settings: Settings): Promise<Settings> {
   const next = mergeSettings(settings);
-  const area = await storageArea();
-  await area.set({ [STORAGE_KEY]: next });
+  const secrets = pickSecrets(next);
+  const publicOnly = stripSecrets(next);
+  const area = await publicStorageArea();
+  await Promise.all([
+    area.set({ [STORAGE_KEY]: publicOnly }),
+    browser.storage.local.set({ [SECRETS_KEY]: secrets }),
+  ]);
   return next;
 }

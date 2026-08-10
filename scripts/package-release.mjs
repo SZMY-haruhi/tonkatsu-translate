@@ -3,7 +3,7 @@
  *
  * Usage:
  *   node scripts/package-release.mjs
- *   node scripts/package-release.mjs --version=1.0.1a
+ *   node scripts/package-release.mjs --version=1.0.2a
  */
 import { spawn } from 'node:child_process'
 import {

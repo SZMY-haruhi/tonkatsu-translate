@@ -1,6 +1,6 @@
 import { makeCacheKey } from '@tonkatsu-translate/pipeline'
 import { cacheModelId } from '@tonkatsu-translate/provider'
-import type { Settings } from './settings'
+import type { PublicSettings } from './settings'
 
 /** Per-tab session cache: skip background RTT for repeats on the same page. */
 const store = new Map<string, string>()
@@ -12,14 +12,14 @@ let meta: {
   model: string
 } | null = null
 
-function metaFingerprint(settings: Settings) {
-  return `${cacheModelId(settings)}|${settings.sourceLang}|${settings.targetLang}`
+function metaFingerprint(settings: PublicSettings) {
+  return `${cacheModelId({ ...settings, apiKey: '', localApiKey: '', deeplApiKey: '' })}|${settings.sourceLang}|${settings.targetLang}`
 }
 
 let lastFingerprint = ''
 
 /** Call once when a page translation session starts (or settings change). */
-export function resetContentTranslationCache(settings: Settings) {
+export function resetContentTranslationCache(settings: PublicSettings) {
   store.clear()
   meta = {
     targetLang: settings.targetLang,
@@ -30,7 +30,7 @@ export function resetContentTranslationCache(settings: Settings) {
 }
 
 /** Ensure cache is keyed for current settings without wiping hits unnecessarily. */
-export function ensureContentTranslationCache(settings: Settings) {
+export function ensureContentTranslationCache(settings: PublicSettings) {
   const next = metaFingerprint(settings)
   if (!meta || next !== lastFingerprint) {
     resetContentTranslationCache(settings)

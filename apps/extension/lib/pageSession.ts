@@ -33,7 +33,7 @@ import {
   ensureContentTranslationCache,
   translateTextsWithContentCache,
 } from './contentTranslateCache';
-import { loadSettings } from './settings';
+import { loadPublicSettings } from './settings';
 import { ttPerfMark, ttPerfReset, ttPerfSummary } from './ttPerf';
 
 type Pending = {
@@ -555,7 +555,7 @@ async function translateBatchRaw(texts: string[]): Promise<string[]> {
 
 /** Content-cache aware batch translate (Task D short-circuit). */
 export async function translateBatchViaBackground(texts: string[]): Promise<string[]> {
-  const settings = await loadSettings();
+  const settings = await loadPublicSettings();
   ensureContentTranslationCache(settings);
   return translateTextsWithContentCache(texts, translateBatchRaw);
 }

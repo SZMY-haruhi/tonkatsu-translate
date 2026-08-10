@@ -525,9 +525,17 @@ textarea:focus {
   font-size: 12px;
 }
 
+.help--security {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #f7efe4;
+  border: 1px solid var(--line);
+}
+
 .help--standalone {
   margin-top: 0;
 }
+
 
 .help a {
   color: var(--accent-ink);
