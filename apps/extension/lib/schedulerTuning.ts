@@ -40,12 +40,22 @@ export function resolveSchedulerTuning(
     }
   }
 
+  if (engine === 'mymemory') {
+    return {
+      coalesceMs: 80,
+      maxBatchSize: mode === 'bilingual' ? 12 : 16,
+      maxBatchChars: mode === 'bilingual' ? 1400 : 1200,
+      // Anonymous service: avoid multiplying its per-IP rate pressure.
+      maxInFlight: Math.min(2, user),
+    }
+  }
+
   if (engine === 'deepl' || engine === 'libretranslate') {
     return {
       coalesceMs: 60,
       maxBatchSize: mode === 'bilingual' ? 24 : 32,
       maxBatchChars: mode === 'bilingual' ? 2800 : 2400,
-      maxInFlight: Math.min(8, Math.max(4, user)),
+      maxInFlight: Math.min(8, user),
     }
   }
 
@@ -54,6 +64,6 @@ export function resolveSchedulerTuning(
     coalesceMs: 100,
     maxBatchSize: mode === 'bilingual' ? 16 : 20,
     maxBatchChars: mode === 'bilingual' ? 1800 : 1600,
-    maxInFlight: Math.min(4, Math.max(2, user)),
+    maxInFlight: Math.min(4, user),
   }
 }

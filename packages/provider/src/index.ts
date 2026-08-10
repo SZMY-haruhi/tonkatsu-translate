@@ -21,6 +21,12 @@ export {
   type DeepLPlan,
 } from './deepl'
 export {
+  createMyMemoryProvider,
+  inferMyMemorySourceLang,
+  MYMEMORY_ENDPOINT,
+  type MyMemoryProviderConfig,
+} from './myMemory'
+export {
   createProviderFromSettings,
   cacheModelId,
   type ProviderEngine,
@@ -31,4 +37,5 @@ export {
   LOCAL_OLLAMA_DEFAULT,
   LOCAL_LMSTUDIO_DEFAULT,
   type LocalPresetKind,
+  type LocalRuntime,
 } from './localOpenAIPreset'

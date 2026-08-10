@@ -4,201 +4,319 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="manifest.open_in_tab" content="true" />
-    <title>炸猪排翻译 · 控制面板</title>
+    <title>炸猪排翻译 · 设置</title>
     <link rel="stylesheet" href="./style.css" />
   </head>
   <body>
-    <main class="panel">
-      <header class="brand">
-        <img class="brand__mark" src="/icon-128.png" alt="炸猪排翻译" width="56" height="56" />
-        <div class="brand__text">
-          <p class="brand__eyebrow">控制面板</p>
-          <h1>炸猪排翻译</h1>
-          <p class="lead">独立窗口配置引擎与语言。顶栏 / 标签栏请使用「替换」模式。</p>
-        </div>
-      </header>
-
-      <form id="settings-form" class="form">
-        <section class="section">
-          <h2 class="section__title">引擎</h2>
-          <label>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <a class="brand" href="#general" aria-label="炸猪排翻译设置首页">
+          <img src="/icon-128.png" alt="" width="44" height="44" />
+          <span>
+            <strong>炸猪排翻译</strong>
+            <small>设置</small>
+          </span>
+        </a>
+        <nav class="nav" aria-label="设置分区">
+          <button type="button" class="nav__item is-active" data-section="general">
+            常规
+          </button>
+          <button type="button" class="nav__item" data-section="engine">
             翻译引擎
-            <select id="engine" name="engine">
-              <option value="deepl" selected>快速 · DeepL（默认）</option>
-              <option value="libretranslate">LibreTranslate（建议自建）</option>
-              <option value="openai-compatible">质量 · OpenAI 兼容 API</option>
-              <option value="local-openai">质量 · 本地模型（Ollama / LM Studio）</option>
-            </select>
-          </label>
-          <p class="hint" id="engineHint"></p>
+          </button>
+          <button type="button" class="nav__item" data-section="sites">
+            站点规则
+          </button>
+          <button type="button" class="nav__item" data-section="advanced">
+            高级
+          </button>
+        </nav>
+        <p class="sidebar__note">设置只保存在浏览器扩展存储中。</p>
+      </aside>
 
-          <div id="deeplFields" class="group" hidden>
-            <label>
-              DeepL API Key
-              <input
-                id="deeplApiKey"
-                name="deeplApiKey"
-                type="password"
-                autocomplete="off"
-                placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx:fx"
-              />
-            </label>
-            <label>
-              DeepL 套餐
-              <select id="deeplPlan" name="deeplPlan">
-                <option value="free" selected>Free（api-free.deepl.com）</option>
-                <option value="pro">Pro（api.deepl.com）</option>
-              </select>
-            </label>
-            <p class="hint">
-              在
-              <a href="https://www.deepl.com/pro-api" target="_blank" rel="noreferrer"
-                >DeepL API</a
-              >
-              申请密钥。Free 密钥通常以 <code>:fx</code> 结尾；保存后点「测试连接」。
-            </p>
+      <main class="content">
+        <form id="settings-form">
+          <div class="content-toolbar">
+            <p id="status" class="status" aria-live="polite">设置已加载</p>
+            <button type="submit" class="button button--primary">保存设置</button>
           </div>
 
-          <div id="libreFields" class="group" hidden>
-            <label>
-              LibreTranslate 地址
-              <input
-                id="libreBaseUrl"
-                name="libreBaseUrl"
-                type="url"
-                placeholder="http://localhost:5000"
-              />
-            </label>
-          </div>
+          <section class="page-section is-active" data-page="general">
+            <header class="page-header">
+              <p class="eyebrow">General</p>
+              <h1>常规</h1>
+              <p>设置翻译语言、网页显示方式和划词行为。</p>
+            </header>
 
-          <div id="openaiFields" class="group" hidden>
-            <div id="localPresets" class="preset-row" hidden>
-              <button type="button" class="ghost" id="presetOllama" data-preset="ollama">
-                填入 Ollama
-              </button>
-              <button type="button" class="ghost" id="presetLmStudio" data-preset="lmstudio">
-                填入 LM Studio
-              </button>
+            <div class="card">
+              <div class="card__header">
+                <div>
+                  <h2>语言</h2>
+                  <p>源语言建议保持自动检测。</p>
+                </div>
+              </div>
+              <div class="form-grid">
+                <label class="field">
+                  <span>源语言</span>
+                  <select id="sourceLang" name="sourceLang">
+                    <option value="auto" selected>自动检测</option>
+                    <option value="en">English</option>
+                    <option value="zh-CN">中文（简体）</option>
+                    <option value="zh-TW">中文（繁体）</option>
+                    <option value="ja">日本語</option>
+                    <option value="ko">한국어</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span>目标语言</span>
+                  <select id="targetLang" name="targetLang">
+                    <option value="zh-CN" selected>中文（简体）</option>
+                    <option value="zh-TW">中文（繁体）</option>
+                    <option value="en">English</option>
+                    <option value="ja">日本語</option>
+                    <option value="ko">한국어</option>
+                  </select>
+                </label>
+              </div>
             </div>
-            <label>
-              接口地址
-              <input id="baseUrl" name="baseUrl" type="url" placeholder="https://api.openai.com/v1" />
-            </label>
-            <label>
-              <span class="field-title" id="apiKeyTitle">API 密钥</span>
-              <input id="apiKey" name="apiKey" type="password" autocomplete="off" />
-            </label>
-            <p class="hint" id="apiKeyHint" hidden></p>
-            <label>
-              <span class="field-title">
-                模型
-                <button
-                  type="button"
-                  class="tip"
-                  id="modelTipBtn"
-                  aria-label="查看模型填写说明"
-                  aria-controls="model-tip-openai"
-                  aria-expanded="false"
-                >
-                  !
-                </button>
-              </span>
-              <input id="model" name="model" type="text" placeholder="gpt-4o-mini" />
-            </label>
-            <p class="tip-panel" id="model-tip-openai" hidden>
-              兼容任何提供 OpenAI Chat Completions 协议的云服务（接口地址填到
-              <code>/v1</code>，再填对应模型名）。常见来源：OpenAI、OpenRouter、DeepSeek、Moonshot（月之暗面）、智谱、通义、Groq、Together、Fireworks。文档写
-              “OpenAI Compatible” 的一般可用；Claude / Gemini 原生接口需走兼容网关。不确定时保存后点「测试连接」。
-            </p>
-            <p class="tip-panel" id="model-tip-local" hidden>
-              填写本机已拉取 / 已加载的模型名（不是云厂商型号）。Ollama 可用
-              <code>ollama list</code> 查看；LM Studio 在软件里查看当前加载模型。接口需开启 OpenAI 兼容端口（地址通常以
-              <code>/v1</code> 结尾）。填好后保存并点「测试连接」。
-            </p>
-          </div>
-        </section>
 
-        <section class="section">
-          <h2 class="section__title">语言与显示</h2>
-          <div class="grid-2">
-            <label>
-              源语言
-              <select id="sourceLang" name="sourceLang">
-                <option value="auto" selected>自动检测</option>
-                <option value="en">English</option>
-                <option value="zh-CN">中文（简体）</option>
-                <option value="zh-TW">中文（繁体）</option>
-                <option value="ja">日本語</option>
-                <option value="ko">한국어</option>
-              </select>
-            </label>
-            <label>
-              目标语言
-              <select id="targetLang" name="targetLang">
-                <option value="zh-CN" selected>中文（简体）</option>
-                <option value="zh-TW">中文（繁体）</option>
-                <option value="en">English</option>
-                <option value="ja">日本語</option>
-                <option value="ko">한국어</option>
-              </select>
-            </label>
-          </div>
-          <label>
-            显示模式
-            <select id="displayMode" name="displayMode">
-              <option value="bilingual">双语（正文插入；跳过顶栏以防溢出）</option>
-              <option value="replace">替换原文（含顶栏 / 标签栏）</option>
-            </select>
-          </label>
-        </section>
+            <div class="card">
+              <div class="card__header">
+                <div>
+                  <h2>网页显示</h2>
+                  <p>替换模式兼容性更好；双语模式仍在持续优化。</p>
+                </div>
+              </div>
+              <div class="choice-grid choice-grid--two">
+                <label class="choice-card">
+                  <input type="radio" name="displayMode" value="replace" checked />
+                  <span>
+                    <strong>替换原文</strong>
+                    <small>默认 · 含顶栏和标签栏，布局最稳定</small>
+                  </span>
+                </label>
+                <label class="choice-card">
+                  <input type="radio" name="displayMode" value="bilingual" />
+                  <span>
+                    <strong>双语对照</strong>
+                    <small>实验性 · 在原文下方插入译文</small>
+                  </span>
+                </label>
+              </div>
+            </div>
 
-        <section class="section">
-          <h2 class="section__title">站点规则</h2>
-          <label>
-            模式
-            <select id="siteRulesMode" name="siteRulesMode">
-              <option value="off" selected>关闭（所有站点可用）</option>
-              <option value="denylist">拒绝列表（下列站点禁用）</option>
-              <option value="allowlist">允许列表（仅下列站点可用）</option>
-            </select>
-          </label>
-          <label>
-            主机列表（每行一个；支持 <code>*.example.com</code>）
-            <textarea
-              id="siteRulesHosts"
-              name="siteRulesHosts"
-              rows="4"
-              placeholder="example.com&#10;*.hltv.org"
-            ></textarea>
-          </label>
-          <p class="hint">
-            被规则禁用的站点：侧边气泡与划词翻译均不可用。修改后请保存并刷新目标网页。
-          </p>
-        </section>
+            <div class="card">
+              <div class="setting-row">
+                <div>
+                  <h2>划词翻译</h2>
+                  <p>开启后按住 Alt 并松开鼠标才显示译文，避免干扰复制。</p>
+                </div>
+                <label class="switch">
+                  <input id="selectionTranslateEnabled" type="checkbox" />
+                  <span aria-hidden="true"></span>
+                  <span class="sr-only">启用划词翻译</span>
+                </label>
+              </div>
+            </div>
+          </section>
 
-        <details class="advanced">
-          <summary>高级 · 保留词（专名 / 术语）</summary>
-          <label>
-            保留词列表（每行一个，翻译时尽量保持原文）
-            <textarea
-              id="doNotTranslate"
-              name="doNotTranslate"
-              rows="4"
-              placeholder="Vitality&#10;s1mple&#10;NaVi"
-            ></textarea>
-          </label>
-          <p class="hint">
-            OpenAI 兼容 / 本地模型会把这些词写入提示词。DeepL / LibreTranslate 不保证专名保留。
-          </p>
-        </details>
+          <section class="page-section" data-page="engine" hidden>
+            <header class="page-header">
+              <p class="eyebrow">Provider</p>
+              <h1>翻译引擎</h1>
+              <p>每种引擎保存独立配置，切换时不会再互相覆盖。</p>
+            </header>
 
-        <div class="actions">
-          <button type="submit">保存</button>
-          <button type="button" id="test" class="secondary">测试连接</button>
-        </div>
-        <p class="status" id="status" aria-live="polite"></p>
-      </form>
-    </main>
+            <div class="engine-grid" role="radiogroup" aria-label="翻译引擎">
+              <label class="engine-card">
+                <input type="radio" name="engine" value="deepl" checked />
+                <span class="engine-card__badge">机翻</span>
+                <strong>DeepL</strong>
+                <small>默认 · 需要 API Key</small>
+              </label>
+              <label class="engine-card">
+                <input type="radio" name="engine" value="mymemory" />
+                <span class="engine-card__badge">免 Key</span>
+                <strong>MyMemory</strong>
+                <small>普通机翻 · 匿名限额</small>
+              </label>
+              <label class="engine-card">
+                <input type="radio" name="engine" value="libretranslate" />
+                <span class="engine-card__badge">自建</span>
+                <strong>LibreTranslate</strong>
+                <small>适合本地或内网部署</small>
+              </label>
+              <label class="engine-card">
+                <input type="radio" name="engine" value="openai-compatible" />
+                <span class="engine-card__badge">质量</span>
+                <strong>OpenAI 兼容 API</strong>
+                <small>云厂商与兼容网关</small>
+              </label>
+              <label class="engine-card">
+                <input type="radio" name="engine" value="local-openai" />
+                <span class="engine-card__badge">本地</span>
+                <strong>本地模型</strong>
+                <small>Ollama、LM Studio 或自定义</small>
+              </label>
+            </div>
+
+            <div class="card provider-panel" data-provider="deepl">
+              <div class="card__header">
+                <div><h2>DeepL</h2><p>必须填写 API Key；Free 与 Pro 使用不同端点。</p></div>
+              </div>
+              <div class="form-grid">
+                <label class="field field--wide">
+                  <span>API Key</span>
+                  <input id="deeplApiKey" type="password" autocomplete="off" placeholder="xxxxxxxx-xxxx:fx" />
+                </label>
+                <label class="field">
+                  <span>套餐</span>
+                  <select id="deeplPlan">
+                    <option value="free">Free · api-free.deepl.com</option>
+                    <option value="pro">Pro · api.deepl.com</option>
+                  </select>
+                </label>
+              </div>
+              <p class="help">在 <a href="https://www.deepl.com/pro-api" target="_blank" rel="noreferrer">DeepL API</a> 申请密钥；Free 密钥通常以 <code>:fx</code> 结尾。</p>
+            </div>
+
+            <div class="card provider-panel" data-provider="mymemory" hidden>
+              <div class="card__header">
+                <div><h2>MyMemory</h2><p>无需注册或 API Key，适合少量临时翻译。</p></div>
+              </div>
+              <p class="help help--standalone">匿名服务约限制为每个 IP 每日 5000 字符，速度与质量不保证。MyMemory 不提供源语言自动检测；选择“自动检测”时扩展会按文字脚本进行基础推断。</p>
+            </div>
+
+            <div class="card provider-panel" data-provider="libretranslate" hidden>
+              <div class="card__header">
+                <div><h2>LibreTranslate</h2><p>请填写你可访问的自建服务地址。</p></div>
+              </div>
+              <label class="field">
+                <span>服务地址</span>
+                <input id="libreBaseUrl" type="url" placeholder="http://localhost:5000" />
+              </label>
+            </div>
+
+            <div class="card provider-panel" data-provider="openai-compatible" hidden>
+              <div class="card__header">
+                <div><h2>OpenAI 兼容 API</h2><p>仅用于云端 API；本地模型配置在独立引擎中。</p></div>
+              </div>
+              <div class="field-stack">
+                <label class="field">
+                  <span>接口地址</span>
+                  <input id="baseUrl" type="url" placeholder="https://api.openai.com/v1" />
+                </label>
+                <label class="field">
+                  <span>API Key</span>
+                  <input id="apiKey" type="password" autocomplete="off" />
+                </label>
+                <label class="field">
+                  <span>模型</span>
+                  <input id="model" type="text" placeholder="gpt-4o-mini" />
+                </label>
+              </div>
+              <p class="help">兼容 Chat Completions 的云服务均可使用，接口地址一般填写到 <code>/v1</code>。</p>
+            </div>
+
+            <div class="card provider-panel" data-provider="local-openai" hidden>
+              <div class="card__header">
+                <div><h2>本地模型</h2><p>选择运行时会自动填入默认地址；模型名仍需与你本机一致。</p></div>
+              </div>
+              <div class="runtime-tabs" role="radiogroup" aria-label="本地运行时">
+                <label><input type="radio" name="localRuntime" value="ollama" checked /><span>Ollama</span></label>
+                <label><input type="radio" name="localRuntime" value="lmstudio" /><span>LM Studio</span></label>
+                <label><input type="radio" name="localRuntime" value="custom" /><span>自定义</span></label>
+              </div>
+              <div class="field-stack">
+                <label class="field">
+                  <span>本地接口地址</span>
+                  <input id="localBaseUrl" type="url" placeholder="http://127.0.0.1:11434/v1" />
+                </label>
+                <label class="field">
+                  <span>API Key <em>可选</em></span>
+                  <input id="localApiKey" type="password" autocomplete="off" />
+                </label>
+                <label class="field">
+                  <span>本机模型名</span>
+                  <input id="localModel" type="text" placeholder="llama3.2" />
+                </label>
+              </div>
+            </div>
+
+            <div class="section-actions">
+              <button type="button" id="test" class="button button--secondary">测试当前引擎</button>
+              <p id="testStatus" class="status" aria-live="polite"></p>
+            </div>
+          </section>
+
+          <section class="page-section" data-page="sites" hidden>
+            <header class="page-header">
+              <p class="eyebrow">Sites</p>
+              <h1>站点规则</h1>
+              <p>默认允许所有站点；需要限制时再启用白名单设置。</p>
+            </header>
+
+            <div class="card">
+              <div class="choice-grid choice-grid--two">
+                <label class="choice-card">
+                  <input type="radio" name="siteScope" value="all" checked />
+                  <span><strong>所有站点</strong><small>扩展在任意普通网页可用</small></span>
+                </label>
+                <label class="choice-card">
+                  <input type="radio" name="siteScope" value="whitelist" />
+                  <span><strong>白名单</strong><small>按下方列表限制可用站点</small></span>
+                </label>
+              </div>
+
+              <div id="siteRuleFields" class="whitelist-fields" hidden>
+                <div class="field site-rule-mode">
+                  <span>站点列表规则</span>
+                  <div class="runtime-tabs" role="radiogroup" aria-label="站点列表规则">
+                    <label><input type="radio" name="siteListMode" value="denylist" /><span>仅以下禁止</span></label>
+                    <label><input type="radio" name="siteListMode" value="allowlist" checked /><span>仅以下允许</span></label>
+                  </div>
+                </div>
+                <label class="field">
+                  <span><b id="siteRulesLabel">允许的主机</b> <em>每行一个，支持通配符</em></span>
+                  <textarea id="siteRulesHosts" rows="7" placeholder="example.com&#10;*.wikipedia.org"></textarea>
+                </label>
+                <p id="siteRulesHelp" class="help">保存后刷新目标网页。未列出的站点会同时禁用整页翻译和划词翻译。</p>
+              </div>
+            </div>
+          </section>
+
+          <section class="page-section" data-page="advanced" hidden>
+            <header class="page-header">
+              <p class="eyebrow">Advanced</p>
+              <h1>高级</h1>
+              <p>通常无需修改；这些设置主要面向 AI 引擎与性能调优。</p>
+            </header>
+
+            <div class="card">
+              <div class="card__header">
+                <div><h2>并发请求</h2><p>实际控制同时进行的翻译批次数；本地模型与 MyMemory 会自动限制到最多 2。</p></div>
+              </div>
+              <label class="field field--compact">
+                <span>最大并发数</span>
+                <input id="maxConcurrency" type="number" min="1" max="12" step="1" value="4" />
+              </label>
+            </div>
+
+            <div class="card">
+              <div class="card__header">
+                <div><h2>保留词</h2><p>OpenAI 兼容与本地模型会将这些专名写入提示词。</p></div>
+              </div>
+              <label class="field">
+                <span>专名 / 术语 <em>每行一个</em></span>
+                <textarea id="doNotTranslate" rows="7" placeholder="Vitality&#10;s1mple&#10;NaVi"></textarea>
+              </label>
+              <p class="help">DeepL 与 LibreTranslate 不保证严格保留这些词。</p>
+            </div>
+          </section>
+
+        </form>
+      </main>
+    </div>
     <script type="module" src="./main.ts"></script>
   </body>
 </html>

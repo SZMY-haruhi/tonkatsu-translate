@@ -1,6 +1,9 @@
 import {
   DEFAULT_LIBRETRANSLATE_URL,
+  LOCAL_LMSTUDIO_DEFAULT,
+  LOCAL_OLLAMA_DEFAULT,
   type DeepLPlan,
+  type LocalRuntime,
   type ProviderEngine,
 } from '@tonkatsu-translate/provider';
 import {
@@ -17,6 +20,10 @@ export type Settings = {
   baseUrl: string;
   apiKey: string;
   model: string;
+  localRuntime: LocalRuntime;
+  localBaseUrl: string;
+  localApiKey: string;
+  localModel: string;
   libreBaseUrl: string;
   deeplApiKey: string;
   deeplPlan: DeepLPlan;
@@ -25,8 +32,12 @@ export type Settings = {
   displayMode: DisplayMode;
   maxConcurrency: number;
   siteRules: SiteRules;
+  /** Last selected list behavior, preserved while site rules are disabled. */
+  siteListMode: 'allowlist' | 'denylist';
   /** Terms the model must keep unchanged (names, teams, glossary). */
   doNotTranslate: string[];
+  /** Show selection bubble when enabled (Alt+mouseup; suppressed after copy). */
+  selectionTranslateEnabled: boolean;
 };
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -34,14 +45,21 @@ export const DEFAULT_SETTINGS: Settings = {
   baseUrl: 'https://api.openai.com/v1',
   apiKey: '',
   model: 'gpt-4o-mini',
+  localRuntime: 'ollama',
+  localBaseUrl: LOCAL_OLLAMA_DEFAULT,
+  localApiKey: '',
+  localModel: 'llama3.2',
   libreBaseUrl: DEFAULT_LIBRETRANSLATE_URL,
   deeplApiKey: '',
   deeplPlan: 'free',
   targetLang: 'zh-CN',
   sourceLang: 'auto',
-  displayMode: 'bilingual',
+  displayMode: 'replace',
   maxConcurrency: 4,
+  /** Off by default — enable in options; when on, Alt+mouseup triggers (see selection.ts). */
+  selectionTranslateEnabled: false,
   siteRules: { ...DEFAULT_SITE_RULES, hosts: [] },
+  siteListMode: 'allowlist',
   doNotTranslate: [],
 };
 
@@ -55,24 +73,23 @@ function isDeepLPlan(value: unknown): value is DeepLPlan {
   return value === 'free' || value === 'pro';
 }
 
+function isLocalRuntime(value: unknown): value is LocalRuntime {
+  return value === 'ollama' || value === 'lmstudio' || value === 'custom';
+}
+
 function isEngine(value: unknown): value is ProviderEngine {
   return (
     value === 'deepl' ||
+    value === 'mymemory' ||
     value === 'libretranslate' ||
     value === 'openai-compatible' ||
     value === 'local-openai'
   );
 }
 
-/** Map removed engines (e.g. MyMemory) onto the new default fast tier. */
 function normalizeEngine(value: unknown): ProviderEngine {
-  if (value === 'mymemory') return 'deepl';
   if (isEngine(value)) return value;
   return DEFAULT_SETTINGS.engine;
-}
-
-function isSiteRulesMode(value: unknown): value is SiteRulesMode {
-  return value === 'off' || value === 'allowlist' || value === 'denylist';
 }
 
 function mergeSiteRules(input: unknown): SiteRules {
@@ -85,7 +102,10 @@ function mergeSiteRules(input: unknown): SiteRules {
         .map((h) => h.trim().toLowerCase())
     : [];
   return {
-    mode: isSiteRulesMode(raw.mode) ? raw.mode : 'off',
+    mode:
+      raw.mode === 'allowlist' || raw.mode === 'denylist'
+        ? raw.mode
+        : 'off',
     hosts,
   };
 }
@@ -106,6 +126,7 @@ function mergeDoNotTranslate(input: unknown): string[] {
 
 export function mergeSettings(partial: Partial<Settings> | null | undefined): Settings {
   const input = partial ?? {};
+  const engine = normalizeEngine(input.engine);
   const deeplApiKey =
     typeof input.deeplApiKey === 'string' ? input.deeplApiKey : DEFAULT_SETTINGS.deeplApiKey;
   let deeplPlan: DeepLPlan = isDeepLPlan(input.deeplPlan)
@@ -116,15 +137,74 @@ export function mergeSettings(partial: Partial<Settings> | null | undefined): Se
     deeplPlan = 'free';
   }
 
-  return {
-    engine: normalizeEngine(input.engine),
-    baseUrl: typeof input.baseUrl === 'string' && input.baseUrl.trim()
+  const hasSeparateLocalConfig =
+    typeof input.localBaseUrl === 'string' ||
+    typeof input.localApiKey === 'string' ||
+    typeof input.localModel === 'string' ||
+    isLocalRuntime(input.localRuntime);
+  const migratedLocalUrl =
+    !hasSeparateLocalConfig &&
+    engine === 'local-openai' &&
+    typeof input.baseUrl === 'string' &&
+    input.baseUrl.trim()
       ? input.baseUrl.trim()
-      : DEFAULT_SETTINGS.baseUrl,
-    apiKey: typeof input.apiKey === 'string' ? input.apiKey : DEFAULT_SETTINGS.apiKey,
-    model: typeof input.model === 'string' && input.model.trim()
-      ? input.model.trim()
-      : DEFAULT_SETTINGS.model,
+      : DEFAULT_SETTINGS.localBaseUrl;
+  const localRuntime = isLocalRuntime(input.localRuntime)
+    ? input.localRuntime
+    : migratedLocalUrl === LOCAL_LMSTUDIO_DEFAULT
+      ? 'lmstudio'
+      : migratedLocalUrl === LOCAL_OLLAMA_DEFAULT
+        ? 'ollama'
+        : engine === 'local-openai' && migratedLocalUrl !== DEFAULT_SETTINGS.localBaseUrl
+          ? 'custom'
+          : DEFAULT_SETTINGS.localRuntime;
+  const localBaseUrl =
+    typeof input.localBaseUrl === 'string'
+      ? input.localBaseUrl.trim() || (localRuntime === 'custom' ? '' : migratedLocalUrl)
+      : migratedLocalUrl;
+  const siteRules = mergeSiteRules(input.siteRules);
+  const siteListMode =
+    input.siteListMode === 'allowlist' || input.siteListMode === 'denylist'
+      ? input.siteListMode
+      : siteRules.mode === 'denylist'
+        ? 'denylist'
+        : 'allowlist';
+
+  return {
+    engine,
+    baseUrl:
+      (engine !== 'local-openai' || hasSeparateLocalConfig) &&
+      typeof input.baseUrl === 'string' &&
+      input.baseUrl.trim()
+        ? input.baseUrl.trim()
+        : DEFAULT_SETTINGS.baseUrl,
+    apiKey:
+      (engine !== 'local-openai' || hasSeparateLocalConfig) &&
+      typeof input.apiKey === 'string'
+        ? input.apiKey
+        : DEFAULT_SETTINGS.apiKey,
+    model:
+      (engine !== 'local-openai' || hasSeparateLocalConfig) &&
+      typeof input.model === 'string' &&
+      input.model.trim()
+        ? input.model.trim()
+        : DEFAULT_SETTINGS.model,
+    localRuntime,
+    localBaseUrl,
+    localApiKey:
+      typeof input.localApiKey === 'string'
+        ? input.localApiKey
+        : engine === 'local-openai' && typeof input.apiKey === 'string'
+          ? input.apiKey
+          : DEFAULT_SETTINGS.localApiKey,
+    localModel:
+      typeof input.localModel === 'string' && input.localModel.trim()
+        ? input.localModel.trim()
+        : engine === 'local-openai' &&
+            typeof input.model === 'string' &&
+            input.model.trim()
+          ? input.model.trim()
+          : DEFAULT_SETTINGS.localModel,
     libreBaseUrl:
       typeof input.libreBaseUrl === 'string' && input.libreBaseUrl.trim()
         ? input.libreBaseUrl.trim()
@@ -146,8 +226,13 @@ export function mergeSettings(partial: Partial<Settings> | null | undefined): Se
       input.maxConcurrency > 0
         ? Math.floor(input.maxConcurrency)
         : DEFAULT_SETTINGS.maxConcurrency,
-    siteRules: mergeSiteRules(input.siteRules),
+    siteRules,
+    siteListMode,
     doNotTranslate: mergeDoNotTranslate(input.doNotTranslate),
+    selectionTranslateEnabled:
+      typeof input.selectionTranslateEnabled === 'boolean'
+        ? input.selectionTranslateEnabled
+        : DEFAULT_SETTINGS.selectionTranslateEnabled,
   };
 }
 

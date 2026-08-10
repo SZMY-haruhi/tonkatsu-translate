@@ -1,6 +1,6 @@
 {
   "name": "@tonkatsu-translate/extension",
-  "version": "1.0.0-rc.2",
+  "version": "1.0.1a",
   "private": true,
   "type": "module",
   "scripts": {

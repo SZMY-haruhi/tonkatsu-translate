@@ -1,6 +1,6 @@
 # Privacy — 炸猪排翻译 / Tonkatsu Translate
 
-本扩展是 **BYOK / 自建后端** 工具：翻译请求发往**你配置的服务**，本项目不运营官方翻译云、账号或广告后端。
+本扩展是 **BYOK 优先 / 可选匿名机翻 / 自建后端** 工具：翻译请求发往**你选择的服务**，本项目不运营官方翻译云、账号或广告后端。
 
 ## What we store (on your device)
 
@@ -19,10 +19,11 @@ When you translate (full page or selection):
 
 1. Selected or discovered page text is sent from the **extension background** to the endpoint implied by your engine:
    - **DeepL** (default fast tier): `api-free.deepl.com` or `api.deepl.com` with your API key
+   - **MyMemory** (optional keyless tier): `api.mymemory.translated.net`; its operator applies anonymous per-IP limits
    - **LibreTranslate**: the base URL you set (often localhost)
    - **OpenAI-compatible / local**: the base URL + key + model you set
 
-There is **no** project-operated translation proxy and **no** MyMemory (or similar anonymous free MT) path.
+There is **no project-operated translation proxy**. When MyMemory is selected, page text is sent directly to MyMemory rather than through this project.
 
 2. The response text is written back into the page DOM (bilingual insert or replace) and may be cached locally.
 

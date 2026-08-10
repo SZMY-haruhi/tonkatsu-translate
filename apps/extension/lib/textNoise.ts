@@ -9,6 +9,8 @@ export function isNonTranslatableNoise(text: string): boolean {
 
   // Pure punctuation / symbols / whitespace
   if (/^[\p{P}\p{S}\s]+$/u.test(t)) return true
+  // Lone separators (wiki / UI pipes)
+  if (/^[\|\s·•\-–—]+$/.test(t)) return true
 
   // Scores, versions-like digit runs: 16-14, 3:0, 1.2.3, 100%, +12
   if (/^[\d\s\-–—:./+%]+$/.test(t)) return true

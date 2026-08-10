@@ -2,21 +2,33 @@ import { BILINGUAL_CLASS_NAME } from '@tonkatsu-translate/render';
 
 const IGNORE_CLOSEST = `.${BILINGUAL_CLASS_NAME}, .tt-selection-bubble, #tt-edge-dock, [data-tt-ui]`;
 const MAX_SELECTION_CHARS = 2000;
+/** Skip bubble briefly after copy/cut so normal Ctrl+C does not pop translate UI. */
+const COPY_SUPPRESS_MS = 700;
 
 export function bindSelectionTranslate(options: {
-  enabled: () => boolean;
+  enabled: () => boolean | Promise<boolean>;
   translate: (text: string) => Promise<string>;
 }): () => void {
   let bubble: HTMLDivElement | null = null;
   let requestId = 0;
+  let copySuppressUntil = 0;
 
   const removeBubble = () => {
     bubble?.remove();
     bubble = null;
   };
 
-  const onMouseUp = async () => {
-    if (!options.enabled()) return;
+  const onCopyOrCut = () => {
+    copySuppressUntil = Date.now() + COPY_SUPPRESS_MS;
+    removeBubble();
+  };
+
+  const onMouseUp = async (event: MouseEvent) => {
+    if (!(await Promise.resolve(options.enabled()))) return;
+    if (Date.now() < copySuppressUntil) return;
+    // When enabled: Alt+mouseup avoids clashing with normal text selection for copy.
+    if (!event.altKey) return;
+
     const selection = window.getSelection();
     if (!selection || selection.isCollapsed) return;
     let text = selection.toString().trim();
@@ -117,19 +129,23 @@ export function bindSelectionTranslate(options: {
     removeBubble();
   };
 
-  const onDocMouseUp = () => {
+  const onDocMouseUp = (event: MouseEvent) => {
     window.setTimeout(() => {
-      void onMouseUp();
+      void onMouseUp(event);
     }, 10);
   };
 
   document.addEventListener('mousedown', onMouseDown);
   document.addEventListener('mouseup', onDocMouseUp);
+  document.addEventListener('copy', onCopyOrCut);
+  document.addEventListener('cut', onCopyOrCut);
 
   return () => {
     requestId += 1;
     removeBubble();
     document.removeEventListener('mousedown', onMouseDown);
     document.removeEventListener('mouseup', onDocMouseUp);
+    document.removeEventListener('copy', onCopyOrCut);
+    document.removeEventListener('cut', onCopyOrCut);
   };
 }

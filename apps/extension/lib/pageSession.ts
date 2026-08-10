@@ -13,6 +13,8 @@ import {
   BILINGUAL_SKIP_CLOSEST,
   collectTranslatableBlocks,
   isLeafTextBlock,
+  isBilingualMarkup,
+  isBlockLikeLink,
   restoreBilingual,
   restoreTree,
   shouldSkipBilingualHost,
@@ -21,7 +23,7 @@ import type { ProviderEngine } from '@tonkatsu-translate/provider';
 import type { SessionState } from './messaging';
 import { sendToBackground } from './messaging';
 import { setSessionState } from './session';
-import { looksAlreadyInTargetLang } from './langHeuristics';
+import { looksAlreadyInTargetLang, looksLikeInlineBilingual } from './langHeuristics';
 import {
   resolveSchedulerTuning,
   type SchedulerTuning,
@@ -286,6 +288,10 @@ function startBilingualTranslation(options: {
 
   const clearHost = (el: Element) => {
     el.querySelectorAll('.tt-bilingual').forEach((node) => node.remove());
+    if (el.matches('a[href]')) {
+      const next = el.nextElementSibling;
+      if (next?.classList.contains('tt-bilingual')) next.remove();
+    }
     el.removeAttribute(BILINGUAL_ATTR);
     lastText.delete(el);
     queued.delete(el);
@@ -293,10 +299,12 @@ function startBilingualTranslation(options: {
 
   const processElement = async (el: Element, priority = viewportPriority(el)) => {
     if (stopped) return;
+    if (isBilingualMarkup(el)) return;
     if (shouldSkipBilingualHost(el) || el.closest(BILINGUAL_SKIP_CLOSEST)) return;
     const text = collectBlockText(el);
     if (text.length < 2) return;
     if (isNonTranslatableNoise(text)) return;
+    if (looksLikeInlineBilingual(text)) return;
     if (looksAlreadyInTargetLang(text, targetLang)) return;
     if (el.getAttribute(BILINGUAL_ATTR) === '1' && lastText.get(el) === text) return;
     if (queued.has(el) && lastText.get(el) === text) return;
@@ -349,9 +357,11 @@ function startBilingualTranslation(options: {
   };
 
   const maybeObserve = (el: Element) => {
+    if (isBilingualMarkup(el)) return;
     if (
       el.matches(BLOCK_SELECTOR) ||
-      isLeafTextBlock(el)
+      isLeafTextBlock(el) ||
+      isBlockLikeLink(el)
     ) {
       observer.observe(el);
       if (isNearViewport(el)) void processElement(el, viewportPriority(el));
@@ -363,6 +373,7 @@ function startBilingualTranslation(options: {
     for (const mutation of mutations) {
       mutation.addedNodes.forEach((node) => {
         if (!(node instanceof Element)) return;
+        if (isBilingualMarkup(node)) return;
         maybeObserve(node);
         watch(node);
         collectTranslatableBlocks(node).forEach((el) => {
@@ -371,6 +382,7 @@ function startBilingualTranslation(options: {
       });
       if (mutation.type === 'characterData') {
         const parent = mutation.target.parentElement;
+        if (parent?.closest('.tt-bilingual')) return;
         const host =
           parent?.closest?.(BLOCK_SELECTOR) ??
           (parent && isLeafTextBlock(parent) ? parent : null);

@@ -1,245 +1,274 @@
-import { DEFAULT_SETTINGS, type Settings } from '../../lib/settings';
-import { sendToBackground } from '../../lib/messaging';
 import {
-  applyLocalPreset,
-  type LocalPresetKind,
+  LOCAL_LMSTUDIO_DEFAULT,
+  LOCAL_OLLAMA_DEFAULT,
+  type LocalRuntime,
 } from '@tonkatsu-translate/provider';
+import { sendToBackground } from '../../lib/messaging';
+import { DEFAULT_SETTINGS, type Settings } from '../../lib/settings';
 import {
   formatHostList,
   parseHostList,
   parseTermList,
-  type SiteRulesMode,
 } from '../../lib/siteRules';
 
 const form = document.querySelector<HTMLFormElement>('#settings-form');
 const status = document.querySelector<HTMLParagraphElement>('#status');
 const testBtn = document.querySelector<HTMLButtonElement>('#test');
-const engineHint = document.querySelector<HTMLParagraphElement>('#engineHint');
-const deeplFields = document.querySelector<HTMLElement>('#deeplFields');
-const libreFields = document.querySelector<HTMLElement>('#libreFields');
-const openaiFields = document.querySelector<HTMLElement>('#openaiFields');
-const localPresets = document.querySelector<HTMLElement>('#localPresets');
-const modelTipBtn = document.querySelector<HTMLButtonElement>('#modelTipBtn');
-const modelTipOpenAi = document.querySelector<HTMLElement>('#model-tip-openai');
-const modelTipLocal = document.querySelector<HTMLElement>('#model-tip-local');
-const apiKeyTitle = document.querySelector<HTMLElement>('#apiKeyTitle');
-const apiKeyHint = document.querySelector<HTMLParagraphElement>('#apiKeyHint');
+const testStatus = document.querySelector<HTMLParagraphElement>('#testStatus');
+const siteRuleFields = document.querySelector<HTMLElement>('#siteRuleFields');
+const siteRulesLabel = document.querySelector<HTMLElement>('#siteRulesLabel');
+const siteRulesHelp = document.querySelector<HTMLElement>('#siteRulesHelp');
 
 const fields = {
-  engine: document.querySelector<HTMLSelectElement>('#engine'),
   baseUrl: document.querySelector<HTMLInputElement>('#baseUrl'),
   apiKey: document.querySelector<HTMLInputElement>('#apiKey'),
   model: document.querySelector<HTMLInputElement>('#model'),
+  localBaseUrl: document.querySelector<HTMLInputElement>('#localBaseUrl'),
+  localApiKey: document.querySelector<HTMLInputElement>('#localApiKey'),
+  localModel: document.querySelector<HTMLInputElement>('#localModel'),
   libreBaseUrl: document.querySelector<HTMLInputElement>('#libreBaseUrl'),
   deeplApiKey: document.querySelector<HTMLInputElement>('#deeplApiKey'),
   deeplPlan: document.querySelector<HTMLSelectElement>('#deeplPlan'),
   sourceLang: document.querySelector<HTMLSelectElement>('#sourceLang'),
   targetLang: document.querySelector<HTMLSelectElement>('#targetLang'),
-  displayMode: document.querySelector<HTMLSelectElement>('#displayMode'),
-  siteRulesMode: document.querySelector<HTMLSelectElement>('#siteRulesMode'),
+  selectionTranslateEnabled: document.querySelector<HTMLInputElement>(
+    '#selectionTranslateEnabled',
+  ),
   siteRulesHosts: document.querySelector<HTMLTextAreaElement>('#siteRulesHosts'),
+  maxConcurrency: document.querySelector<HTMLInputElement>('#maxConcurrency'),
   doNotTranslate: document.querySelector<HTMLTextAreaElement>('#doNotTranslate'),
 };
 
-function closeModelTips() {
-  modelTipOpenAi?.setAttribute('hidden', '');
-  modelTipLocal?.setAttribute('hidden', '');
-  modelTipBtn?.setAttribute('aria-expanded', 'false');
+function checkedValue(name: string): string | undefined {
+  return document.querySelector<HTMLInputElement>(
+    `input[name="${name}"]:checked`,
+  )?.value;
 }
 
-function activeModelTip(engine: Settings['engine']) {
-  return engine === 'local-openai' ? modelTipLocal : modelTipOpenAi;
+function setChecked(name: string, value: string) {
+  const input = document.querySelector<HTMLInputElement>(
+    `input[name="${name}"][value="${value}"]`,
+  );
+  if (input) input.checked = true;
 }
 
-function readEngine(value: string | undefined): Settings['engine'] {
-  if (value === 'openai-compatible') return 'openai-compatible';
-  if (value === 'local-openai') return 'local-openai';
-  if (value === 'libretranslate') return 'libretranslate';
+function readEngine(): Settings['engine'] {
+  const value = checkedValue('engine');
+  if (
+    value === 'mymemory' ||
+    value === 'libretranslate' ||
+    value === 'openai-compatible' ||
+    value === 'local-openai'
+  ) {
+    return value;
+  }
   return 'deepl';
 }
 
-function readDeepLPlan(value: string | undefined): Settings['deeplPlan'] {
-  return value === 'pro' ? 'pro' : 'free';
-}
-
-function readSiteRulesMode(value: string | undefined): SiteRulesMode {
-  if (value === 'allowlist' || value === 'denylist') return value;
-  return 'off';
+function readLocalRuntime(): LocalRuntime {
+  const value = checkedValue('localRuntime');
+  if (value === 'lmstudio' || value === 'custom') return value;
+  return 'ollama';
 }
 
 function ensureLangOption(select: HTMLSelectElement | null, value: string) {
   if (!select) return;
-  const exists = Array.from(select.options).some((opt) => opt.value === value);
-  if (!exists) {
-    const opt = document.createElement('option');
-    opt.value = value;
-    opt.textContent = value;
-    select.appendChild(opt);
-  }
+  if (Array.from(select.options).some((option) => option.value === value)) return;
+  const option = document.createElement('option');
+  option.value = value;
+  option.textContent = value;
+  select.appendChild(option);
 }
 
 function readForm(): Settings {
+  const concurrency = Number(fields.maxConcurrency?.value);
+  const localRuntime = readLocalRuntime();
+  const siteListMode =
+    checkedValue('siteListMode') === 'denylist' ? 'denylist' : 'allowlist';
   return {
     ...DEFAULT_SETTINGS,
-    engine: readEngine(fields.engine?.value),
-    baseUrl: fields.baseUrl?.value ?? DEFAULT_SETTINGS.baseUrl,
+    engine: readEngine(),
+    baseUrl: fields.baseUrl?.value.trim() || DEFAULT_SETTINGS.baseUrl,
     apiKey: fields.apiKey?.value ?? '',
-    model: fields.model?.value ?? DEFAULT_SETTINGS.model,
-    libreBaseUrl: fields.libreBaseUrl?.value ?? DEFAULT_SETTINGS.libreBaseUrl,
+    model: fields.model?.value.trim() || DEFAULT_SETTINGS.model,
+    localRuntime,
+    localBaseUrl:
+      fields.localBaseUrl?.value.trim() ||
+      (localRuntime === 'custom' ? '' : DEFAULT_SETTINGS.localBaseUrl),
+    localApiKey: fields.localApiKey?.value ?? '',
+    localModel:
+      fields.localModel?.value.trim() || DEFAULT_SETTINGS.localModel,
+    libreBaseUrl:
+      fields.libreBaseUrl?.value.trim() || DEFAULT_SETTINGS.libreBaseUrl,
     deeplApiKey: fields.deeplApiKey?.value ?? '',
-    deeplPlan: readDeepLPlan(fields.deeplPlan?.value),
-    sourceLang: fields.sourceLang?.value?.trim() || DEFAULT_SETTINGS.sourceLang,
-    targetLang: fields.targetLang?.value ?? DEFAULT_SETTINGS.targetLang,
+    deeplPlan: fields.deeplPlan?.value === 'pro' ? 'pro' : 'free',
+    sourceLang:
+      fields.sourceLang?.value.trim() || DEFAULT_SETTINGS.sourceLang,
+    targetLang: fields.targetLang?.value || DEFAULT_SETTINGS.targetLang,
     displayMode:
-      fields.displayMode?.value === 'replace' ? 'replace' : 'bilingual',
+      checkedValue('displayMode') === 'bilingual' ? 'bilingual' : 'replace',
+    selectionTranslateEnabled:
+      fields.selectionTranslateEnabled?.checked ?? false,
+    maxConcurrency:
+      Number.isFinite(concurrency) && concurrency > 0
+        ? Math.min(12, Math.floor(concurrency))
+        : DEFAULT_SETTINGS.maxConcurrency,
     siteRules: {
-      mode: readSiteRulesMode(fields.siteRulesMode?.value),
+      mode:
+        checkedValue('siteScope') === 'whitelist' ? siteListMode : 'off',
       hosts: parseHostList(fields.siteRulesHosts?.value ?? ''),
     },
+    siteListMode,
     doNotTranslate: parseTermList(fields.doNotTranslate?.value ?? ''),
   };
 }
 
-function usesOpenAiFields(engine: Settings['engine']) {
-  return engine === 'openai-compatible' || engine === 'local-openai';
+function syncEngineUi() {
+  const engine = readEngine();
+  document.querySelectorAll<HTMLElement>('[data-provider]').forEach((panel) => {
+    panel.hidden = panel.dataset.provider !== engine;
+  });
 }
 
-function syncEngineUi(engine: Settings['engine']) {
-  const isLocal = engine === 'local-openai';
-  if (deeplFields) deeplFields.hidden = engine !== 'deepl';
-  if (libreFields) libreFields.hidden = engine !== 'libretranslate';
-  if (openaiFields) openaiFields.hidden = !usesOpenAiFields(engine);
-  if (localPresets) localPresets.hidden = !isLocal;
-
-  closeModelTips();
-  if (modelTipBtn) {
-    modelTipBtn.setAttribute(
-      'aria-label',
-      isLocal ? '查看本机模型填写说明' : '查看 OpenAI 兼容云服务提示',
-    );
-    modelTipBtn.setAttribute(
-      'aria-controls',
-      isLocal ? 'model-tip-local' : 'model-tip-openai',
-    );
+function syncSiteRulesUi() {
+  const whitelist = checkedValue('siteScope') === 'whitelist';
+  const allowlist = checkedValue('siteListMode') !== 'denylist';
+  if (siteRuleFields) siteRuleFields.hidden = !whitelist;
+  if (siteRulesLabel) {
+    siteRulesLabel.textContent = allowlist ? '允许的主机' : '禁止的主机';
   }
-
-  if (fields.baseUrl) {
-    fields.baseUrl.placeholder = isLocal
-      ? 'http://127.0.0.1:11434/v1'
-      : 'https://api.openai.com/v1';
-  }
-  if (fields.model) {
-    fields.model.placeholder = isLocal ? 'llama3.2' : 'gpt-4o-mini';
-  }
-  if (apiKeyTitle) {
-    apiKeyTitle.textContent = isLocal ? 'API 密钥（可选）' : 'API 密钥';
-  }
-  if (apiKeyHint) {
-    if (isLocal) {
-      apiKeyHint.hidden = false;
-      apiKeyHint.textContent =
-        'Ollama / 多数本机 OpenAI 兼容端口通常可留空；若软件要求密钥再填写。';
-    } else if (engine === 'openai-compatible') {
-      apiKeyHint.hidden = false;
-      apiKeyHint.textContent = '云服务一般需要填写供应商提供的 API Key。';
-    } else {
-      apiKeyHint.hidden = true;
-      apiKeyHint.textContent = '';
-    }
-  }
-
-  if (engineHint) {
-    if (engine === 'deepl') {
-      engineHint.textContent =
-        '快速档：DeepL 机翻（需 API Key）。适合整页吞吐；难句/专名可再切到质量档 AI。';
-    } else if (engine === 'libretranslate') {
-      engineHint.textContent =
-        '请填写可访问的 LibreTranslate 地址。社区镜像常不稳定，推荐 Docker 自建（默认 localhost:5000）。';
-    } else if (isLocal) {
-      engineHint.textContent =
-        '请先启动本机 Ollama 或 LM Studio 的 OpenAI 兼容端口，再用下方按钮填入默认地址，保存后点「测试连接」。';
-    } else {
-      engineHint.textContent =
-        '质量档：请求将直接发送到你配置的云端 OpenAI 兼容接口（与「本地模型」相互独立配置）。';
-    }
+  if (siteRulesHelp) {
+    siteRulesHelp.textContent = allowlist
+      ? '保存后刷新目标网页。未列出的站点会同时禁用整页翻译和划词翻译。'
+      : '保存后刷新目标网页。列出的站点会同时禁用整页翻译和划词翻译。';
   }
 }
 
 function fillForm(settings: Settings) {
-  if (fields.engine) fields.engine.value = settings.engine;
+  setChecked('engine', settings.engine);
+  setChecked('localRuntime', settings.localRuntime);
+  setChecked('displayMode', settings.displayMode);
+  setChecked(
+    'siteScope',
+    settings.siteRules.mode === 'off' ? 'all' : 'whitelist',
+  );
+  setChecked('siteListMode', settings.siteListMode);
+
   if (fields.baseUrl) fields.baseUrl.value = settings.baseUrl;
   if (fields.apiKey) fields.apiKey.value = settings.apiKey;
   if (fields.model) fields.model.value = settings.model;
+  if (fields.localBaseUrl) fields.localBaseUrl.value = settings.localBaseUrl;
+  if (fields.localApiKey) fields.localApiKey.value = settings.localApiKey;
+  if (fields.localModel) fields.localModel.value = settings.localModel;
   if (fields.libreBaseUrl) fields.libreBaseUrl.value = settings.libreBaseUrl;
   if (fields.deeplApiKey) fields.deeplApiKey.value = settings.deeplApiKey;
   if (fields.deeplPlan) fields.deeplPlan.value = settings.deeplPlan;
+
   ensureLangOption(fields.sourceLang, settings.sourceLang);
   ensureLangOption(fields.targetLang, settings.targetLang);
   if (fields.sourceLang) fields.sourceLang.value = settings.sourceLang;
   if (fields.targetLang) fields.targetLang.value = settings.targetLang;
-  if (fields.displayMode) fields.displayMode.value = settings.displayMode;
-  if (fields.siteRulesMode) fields.siteRulesMode.value = settings.siteRules.mode;
+  if (fields.selectionTranslateEnabled) {
+    fields.selectionTranslateEnabled.checked =
+      settings.selectionTranslateEnabled;
+  }
   if (fields.siteRulesHosts) {
     fields.siteRulesHosts.value = formatHostList(settings.siteRules.hosts);
+  }
+  if (fields.maxConcurrency) {
+    fields.maxConcurrency.value = String(settings.maxConcurrency);
   }
   if (fields.doNotTranslate) {
     fields.doNotTranslate.value = formatHostList(settings.doNotTranslate);
   }
-  syncEngineUi(settings.engine);
+
+  syncEngineUi();
+  syncSiteRulesUi();
 }
 
-function setStatus(text: string) {
-  if (status) status.textContent = text;
+function setStatus(text: string, state: 'idle' | 'success' | 'error' = 'idle') {
+  if (!status) return;
+  status.textContent = text;
+  status.dataset.state = state;
 }
 
-function applyPreset(kind: LocalPresetKind) {
-  const next = applyLocalPreset(kind, readForm());
-  fillForm({ ...readForm(), ...next });
-  setStatus(
-    kind === 'ollama'
-      ? '已填入 Ollama 默认地址。请确认本机模型名后保存并测试连接。'
-      : '已填入 LM Studio 默认地址。请确认本机模型名后保存并测试连接。',
-  );
+function setTestStatus(text: string, state: 'idle' | 'success' | 'error' = 'idle') {
+  if (!testStatus) return;
+  testStatus.textContent = text;
+  testStatus.dataset.state = state;
+}
+
+function showSection(section: string, updateHash = true) {
+  const valid = ['general', 'engine', 'sites', 'advanced'];
+  const next = valid.includes(section) ? section : 'general';
+  document.querySelectorAll<HTMLElement>('[data-page]').forEach((page) => {
+    const active = page.dataset.page === next;
+    page.hidden = !active;
+    page.classList.toggle('is-active', active);
+  });
+  document.querySelectorAll<HTMLButtonElement>('[data-section]').forEach((item) => {
+    const active = item.dataset.section === next;
+    item.classList.toggle('is-active', active);
+    if (active) item.setAttribute('aria-current', 'page');
+    else item.removeAttribute('aria-current');
+  });
+  if (updateHash) history.replaceState(null, '', `#${next}`);
+  window.scrollTo({ top: 0, behavior: 'instant' });
+}
+
+function applyRuntimeDefaults(runtime: LocalRuntime) {
+  if (runtime === 'ollama') {
+    if (fields.localBaseUrl) fields.localBaseUrl.value = LOCAL_OLLAMA_DEFAULT;
+    if (fields.localModel) fields.localModel.value = 'llama3.2';
+  } else if (runtime === 'lmstudio') {
+    if (fields.localBaseUrl) fields.localBaseUrl.value = LOCAL_LMSTUDIO_DEFAULT;
+    if (fields.localModel) fields.localModel.value = 'local-model';
+  } else {
+    if (fields.localBaseUrl) fields.localBaseUrl.value = '';
+    setStatus('自定义接口地址已清空，请手动填写。');
+    fields.localBaseUrl?.focus();
+    return;
+  }
+  setStatus('已填入本地运行时默认值，请确认模型名。');
 }
 
 async function init() {
   try {
     const settings = await sendToBackground({ type: 'GET_SETTINGS' });
     fillForm(settings);
+    setStatus('设置已加载');
   } catch {
     fillForm(DEFAULT_SETTINGS);
-    setStatus('已加载默认设置（存储不可用）。');
+    setStatus('存储不可用，已加载默认设置。', 'error');
   }
+  showSection(location.hash.slice(1) || 'general', false);
 }
 
-fields.engine?.addEventListener('change', () => {
-  syncEngineUi(readForm().engine);
+document.querySelectorAll<HTMLButtonElement>('[data-section]').forEach((item) => {
+  item.addEventListener('click', () => showSection(item.dataset.section ?? 'general'));
+});
+
+document.querySelectorAll<HTMLInputElement>('input[name="engine"]').forEach((input) => {
+  input.addEventListener('change', syncEngineUi);
+});
+
+document.querySelectorAll<HTMLInputElement>('input[name="siteScope"]').forEach((input) => {
+  input.addEventListener('change', syncSiteRulesUi);
+});
+
+document.querySelectorAll<HTMLInputElement>('input[name="siteListMode"]').forEach((input) => {
+  input.addEventListener('change', syncSiteRulesUi);
+});
+
+document.querySelectorAll<HTMLInputElement>('input[name="localRuntime"]').forEach((input) => {
+  input.addEventListener('change', () => {
+    if (input.checked) applyRuntimeDefaults(readLocalRuntime());
+  });
 });
 
 fields.deeplApiKey?.addEventListener('change', () => {
-  const key = fields.deeplApiKey?.value?.trim() ?? '';
-  if (fields.deeplPlan && key.endsWith(':fx')) {
+  if (fields.deeplApiKey?.value.trim().endsWith(':fx') && fields.deeplPlan) {
     fields.deeplPlan.value = 'free';
-  }
-});
-
-document.querySelector('#presetOllama')?.addEventListener('click', () => {
-  applyPreset('ollama');
-});
-document.querySelector('#presetLmStudio')?.addEventListener('click', () => {
-  applyPreset('lmstudio');
-});
-
-modelTipBtn?.addEventListener('click', () => {
-  if (!modelTipBtn) return;
-  const engine = readForm().engine;
-  const panel = activeModelTip(engine);
-  if (!panel) return;
-  const willOpen = panel.hasAttribute('hidden');
-  closeModelTips();
-  if (willOpen) {
-    panel.removeAttribute('hidden');
-    modelTipBtn.setAttribute('aria-expanded', 'true');
   }
 });
 
@@ -251,28 +280,32 @@ form?.addEventListener('submit', async (event) => {
       settings: readForm(),
     });
     fillForm(saved);
-    setStatus('已保存。');
+    setStatus('设置已保存。刷新目标网页后生效。', 'success');
   } catch (error) {
-    setStatus(error instanceof Error ? error.message : '保存失败。');
+    setStatus(error instanceof Error ? error.message : '保存失败。', 'error');
   }
 });
 
 testBtn?.addEventListener('click', async () => {
   testBtn.disabled = true;
-  setStatus('正在测试连接…');
+  setTestStatus('正在测试当前引擎…');
   try {
     await sendToBackground({
       type: 'SAVE_SETTINGS',
       settings: readForm(),
     });
     const result = await sendToBackground({ type: 'TEST_CONNECTION' });
-    setStatus(
+    setTestStatus(
       result.ok
         ? '连接成功。'
         : `连接失败：${result.message ?? '未知错误'}`,
+      result.ok ? 'success' : 'error',
     );
   } catch (error) {
-    setStatus(error instanceof Error ? error.message : '连接测试失败。');
+    setTestStatus(
+      error instanceof Error ? error.message : '连接测试失败。',
+      'error',
+    );
   } finally {
     testBtn.disabled = false;
   }

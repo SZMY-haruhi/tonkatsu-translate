@@ -1,4 +1,12 @@
 /** Cheap heuristics to avoid bilingual-duplicating text already in the target language. */
+export function looksLikeInlineBilingual(text: string): boolean {
+  const normalized = text.replace(/\s+/g, ' ').trim()
+  if (!/\|/.test(normalized)) return false
+  const hasLatin = /[A-Za-z]/.test(normalized)
+  const hasCjk = /[\u4e00-\u9fff]/.test(normalized)
+  return hasLatin && hasCjk && normalized.length <= 240
+}
+
 export function looksAlreadyInTargetLang(text: string, targetLang: string): boolean {
   const normalized = text.replace(/\s+/g, ' ').trim()
   if (normalized.length < 2) return false

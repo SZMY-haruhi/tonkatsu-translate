@@ -1,7 +1,7 @@
 # 炸猪排翻译 · 项目总计划书
 
 > **文档版本：** 2026-08-10  
-> **产品版本：** v1.0.0-rc.2  
+> **产品版本：** v1.0.1a（Alpha 测试）  
 > **仓库：** https://github.com/SZMY-haruhi/tonkatsu-translate
 
 本文档是项目的**唯一**规划与阶段性总结文件，替代此前分散在 `docs/superpowers/` 等处的旧计划书。
@@ -17,12 +17,13 @@
 - **不是**「沉浸式翻译」官方产品，也**不是**对其闭源产品的二次分发。
 - **是** 极简、开源、用户自备 API 的网页双语工具：同一套 UX 下可切换快速机翻、自建后端或 AI 质量档。
 - **分发方式：** GitHub Releases 侧载 zip；暂不上架 Chrome Web Store。
+- **阶段定位：** **长期 Alpha 测试**——尚未达到产品目标，不承诺稳定版时间表；版本号使用 `1.0.xa` 标识测试构建。
 
 ### 技术架构（Monorepo）
 
 ```text
 apps/extension/          WXT 扩展：content / background / options / popup
-packages/provider/       翻译引擎：DeepL、LibreTranslate、OpenAI 兼容、本地预设
+packages/provider/       翻译引擎：DeepL、MyMemory、LibreTranslate、OpenAI 兼容、本地预设
 packages/pipeline/       批量翻译、内存缓存、cache key
 packages/render/         双语插入、替换模式、DOM 还原
 scripts/package-release  打干净发行 zip（扩展 + 源码）
@@ -34,10 +35,9 @@ docs/                    隐私说明、本总计划书
 | 档位 | 用途 | 当前实现 |
 |------|------|----------|
 | **快速（默认）** | 整页吞吐、接近「能流畅读」 | **DeepL**（Free / Pro BYOK） |
+| **免 Key 普通机翻** | 少量、临时翻译 | MyMemory（匿名约 5000 字符/日） |
 | **质量（AI）** | 难句、术语、专名 | OpenAI 兼容 API；本地 Ollama / LM Studio |
 | **自建** | 隐私 / 内网 | LibreTranslate |
-
-**已移除：** MyMemory（旧 `engine: mymemory` 设置静默映射到 DeepL）。
 
 ---
 
@@ -79,16 +79,28 @@ docs/                    隐私说明、本总计划书
 
 ---
 
+### 阶段 4 — 控制面板与 Alpha 重定位（v1.0.1a）
+
+| 内容 | 状态 |
+|------|------|
+| 控制面板新标签页分区导航；五引擎字段隔离 | ✅ 完成 |
+| 恢复 MyMemory 免 Key 机翻；站点规则层级 UI | ✅ 完成 |
+| 保存按钮 / 引擎测试状态固定布局 | ✅ 完成 |
+| 双语 DOM 修复；替换默认；划词 Alt 触发 | ✅ 完成 |
+| 产品定位调整为**长期 Alpha**；版本号 `1.0.1a` | ✅ 完成 |
+
+---
+
 ## 3. 当前进度
 
 | 维度 | 状态 |
 |------|------|
-| **版本** | v1.0.0-rc.2（[Release](https://github.com/SZMY-haruhi/tonkatsu-translate/releases/tag/v1.0.0-rc.2)） |
+| **版本** | v1.0.1a Alpha（[Release](https://github.com/SZMY-haruhi/tonkatsu-translate/releases/tag/v1.0.1a)） |
+| **阶段** | 长期 Alpha 测试；未达产品目标，持续迭代 |
 | **默认引擎** | DeepL |
-| **核心路径** | 双语 / 替换 / 划词 / 侧边气泡 / 站点规则 — 可用 |
+| **核心路径** | 默认替换 / 实验双语 / Alt 划词 / 侧边气泡 / 站点规则 — 可用 |
 | **自动化** | 本地 smoke / bench 不进入公开仓库（开发机保留可选） |
-| **待你本机验收** | 填入真实 DeepL Key：测试连接 + 快速档整页双语/替换 |
-| **待你本机验收** | 重复打开同页感受缓存命中加速（逻辑已上线） |
+| **待验收** | 各引擎真实 Key 下整页翻译与缓存命中体验 |
 
 ---
 
@@ -98,16 +110,17 @@ docs/                    隐私说明、本总计划书
 
 - 整页翻译与还原：`Alt+Shift+T` / `Alt+Shift+R`
 - 侧边 Logo 气泡：吸附、拖动、一键启停
-- **双语插入**与**替换显示**两种模式
-- **划词翻译**气泡
-- 控制面板：引擎、语言、显示模式、并发、站点允许/拒绝、保留词（AI 档）
-- 默认 **DeepL**；可选 LibreTranslate、OpenAI 兼容、本地 Ollama/LM Studio
+- **替换显示**为默认；保留实验性双语插入模式
+- **划词翻译**默认关闭，启用后按住 Alt 松开鼠标触发
+- 新标签页控制面板：左侧分区导航、五引擎独立配置、语言与显示、站点规则、高级设置
+- 默认 **DeepL**；可选免 Key MyMemory、LibreTranslate、OpenAI 兼容、本地 Ollama/LM Studio
 
 ### 引擎与请求
 
 - 翻译请求由扩展 **background 直达** 用户配置的厂商/自建端点，不经本项目服务器
 - DeepL Free（`:fx`）/ Pro 端点自动识别
-- 旧 MyMemory 设置静默映射 DeepL
+- MyMemory 匿名免 Key 通道；明确展示约 5000 字符/日限制，自动源语言使用本地脚本推断
+- 云端 OpenAI 兼容 API 与本地 Ollama / LM Studio 分开保存地址、密钥和模型
 
 ### 性能与调度（rc.2）
 
@@ -130,12 +143,13 @@ pnpm package -- --version=x.y.z     # release/ 下 chrome / firefox / source zip
 
 按优先级与投入大致分组；**非承诺路线图**，实施前可再拆任务。
 
-### P1 — 产品完善（建议下一步）
+### P1 — 产品完善（Alpha 期间）
 
-- [ ] **控制面板 UX 矩阵**：四引擎下字段/帮助/测试连接文案不串台（原 control-panel 计划）
+- [x] **控制面板 UX 矩阵**：新标签页分区导航，五引擎字段与云/本地配置完全隔离
 - [ ] **DeepL 正式验收**：Free/Pro Key、配额与错误提示分类
-- [ ] **站点规则 UI**：`off` / 允许 / 拒绝 三模式空状态与禁用提示一致
-- [ ] **v1.0.0 正式版**：rc 稳定后去 `-rc` 标签
+- [x] **站点范围 UI**：顶层「所有站点 / 白名单」，白名单内选择仅以下禁止 / 仅以下允许
+- [ ] **双语模式稳定性**：在达到可接受体验前保持实验标签
+- [ ] **退出 Alpha 条件**（未定）：双语稳定、多引擎验收、错误提示完善等达标后再讨论 `1.0.0` 非测试标签
 
 ### P2 — 性能与体验
 
@@ -159,7 +173,6 @@ pnpm package -- --version=x.y.z     # release/ 下 chrome / firefox / source zip
 - 为单一网站（如 HLTV）写死 DOM/CSS 作为主路径
 - 扩展内嵌 Ollama 运行时
 - 依赖 Chrome 自带翻译替代本产品 UX
-- 恢复 MyMemory 或匿名免费机翻通道
 
 ---
 
@@ -181,9 +194,10 @@ pnpm package -- --version=x.y.z     # release/ 下 chrome / firefox / source zip
 |------|------|
 | v0.1.x | 早期功能验证（已 superseded） |
 | v1.0.0-rc.1 | 干净 1.0 产品树首发候选 |
-| **v1.0.0-rc.2** | DeepL 默认、调度/视口/缓存、移除 MyMemory |
-| v1.0.0 | 目标：正式版（待 rc 验收） |
+| v1.0.0-rc.2 | DeepL 默认、调度/视口/缓存 |
+| **v1.0.1a** | 控制面板重构、MyMemory 恢复、站点规则层级；**长期 Alpha 起点** |
+| v1.0.xa | Alpha 测试系列（功能迭代，非稳定承诺） |
 
 ---
 
-*最后更新：2026-08-10 · 与 v1.0.0-rc.2 发行同步*
+*最后更新：2026-08-10 · 与 v1.0.1a Alpha 发行同步*

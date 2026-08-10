@@ -3,8 +3,8 @@ import { defineConfig } from 'wxt';
 export default defineConfig({
   manifest: {
     name: '炸猪排翻译',
-    description: '极简 BYOK 网页双语翻译扩展',
-    permissions: ['storage', 'activeTab', 'scripting', 'windows'],
+    description: '极简 BYOK 网页双语翻译扩展（Alpha 测试版）',
+    permissions: ['storage', 'activeTab', 'scripting'],
     host_permissions: ['<all_urls>'],
     options_ui: {
       open_in_tab: true,

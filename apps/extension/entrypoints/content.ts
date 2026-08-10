@@ -95,7 +95,11 @@ export default defineContentScript({
     void refreshHostGate();
 
     bindSelectionTranslate({
-      enabled: () => !hostBlocked,
+      enabled: async () => {
+        if (hostBlocked) return false;
+        const settings = await loadSettings();
+        return settings.selectionTranslateEnabled;
+      },
       translate: async (text) => {
         await refreshHostGate();
         if (hostBlocked) throw new Error(hostBlocked);

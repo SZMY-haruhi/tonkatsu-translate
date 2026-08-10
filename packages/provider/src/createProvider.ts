@@ -1,10 +1,13 @@
 import { createDeepLProvider, type DeepLPlan } from './deepl'
 import { createLibreTranslateProvider, DEFAULT_LIBRETRANSLATE_URL } from './libreTranslate'
+import type { LocalRuntime } from './localOpenAIPreset'
+import { createMyMemoryProvider } from './myMemory'
 import { createOpenAICompatibleProvider } from './openaiCompatible'
 import type { TranslationProvider } from './types'
 
 export type ProviderEngine =
   | 'deepl'
+  | 'mymemory'
   | 'libretranslate'
   | 'openai-compatible'
   | 'local-openai'
@@ -14,6 +17,10 @@ export type ProviderSettings = {
   baseUrl: string
   apiKey: string
   model: string
+  localRuntime?: LocalRuntime
+  localBaseUrl?: string
+  localApiKey?: string
+  localModel?: string
   libreBaseUrl?: string
   /** DeepL API key (BYOK). Kept separate from OpenAI-compatible apiKey. */
   deeplApiKey?: string
@@ -28,11 +35,16 @@ export function cacheModelId(settings: ProviderSettings): string {
     const plan = settings.deeplPlan ?? (key.trim().endsWith(':fx') ? 'free' : 'pro')
     return `deepl:${plan}`
   }
+  if (settings.engine === 'mymemory') {
+    return 'mymemory:anonymous'
+  }
   if (settings.engine === 'libretranslate') {
     return `libre:${settings.libreBaseUrl?.trim() || DEFAULT_LIBRETRANSLATE_URL}`
   }
   if (settings.engine === 'local-openai') {
-    return `local:${settings.baseUrl.trim()}|${settings.model}`
+    return `local:${settings.localBaseUrl?.trim() || settings.baseUrl.trim()}|${
+      settings.localModel || settings.model
+    }`
   }
   return settings.model
 }
@@ -47,12 +59,28 @@ export function createProviderFromSettings(
     })
   }
 
+  if (settings.engine === 'mymemory') {
+    return createMyMemoryProvider()
+  }
+
   if (settings.engine === 'libretranslate') {
     const baseUrl = settings.libreBaseUrl?.trim() || DEFAULT_LIBRETRANSLATE_URL
     return createLibreTranslateProvider({ baseUrl })
   }
 
-  // openai-compatible and local-openai share the same chat/completions path.
+  if (settings.engine === 'local-openai') {
+    const baseUrl =
+      settings.localBaseUrl === undefined
+        ? settings.baseUrl
+        : settings.localBaseUrl.trim()
+    return createOpenAICompatibleProvider({
+      baseUrl,
+      apiKey: settings.localApiKey ?? '',
+      model: settings.localModel?.trim() || settings.model,
+      doNotTranslate: settings.doNotTranslate,
+    })
+  }
+
   return createOpenAICompatibleProvider({
     baseUrl: settings.baseUrl,
     apiKey: settings.apiKey,
