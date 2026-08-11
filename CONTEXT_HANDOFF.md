@@ -3,10 +3,11 @@
 > **文档类型：** Cursor 会话上下文交接（与 `docs/PROJECT-PLAN.md` 不同）  
 > **用途：** 新会话在不依赖旧聊天历史的前提下接手开发  
 > **生成时间：** 2026-08-11（站点族优化验收）  
-> **交接时仓库版本：** `v1.0.3a`（Alpha）  
-> **交接时最新提交：** （本会话改动待用户确认后提交）  
+> **交接时仓库版本：** `v1.0.3a`  
+> **交接时最新提交：** `8a044b3` — naming/NOTES 规范化（发版提交 `f61bf8c`）  
 > **远端：** https://github.com/SZMY-haruhi/tonkatsu-translate  
-> **前序 Release：** https://github.com/SZMY-haruhi/tonkatsu-translate/releases/tag/v1.0.2a  
+> **Release：** https://github.com/SZMY-haruhi/tonkatsu-translate/releases/tag/v1.0.3a  
+> **命名约定：** 版本号 `1.0.xa` 本身即测试构建；Release **标题只用** `v1.0.3a`，勿写成 `v1.0.3a Alpha`。  
 
 **与总计划书的区别：**
 
