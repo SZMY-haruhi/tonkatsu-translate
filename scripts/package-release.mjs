@@ -101,8 +101,8 @@ function shouldCopySource(relPath) {
   if (norm.startsWith('apps/extension/.wxt/')) return false
   if (norm.startsWith('.smoke')) return false
   if (/(^|\/)docs\/qa(\/|$)/.test(norm)) return false
-  if (/(^|\/)\.env($|\.)/i.test(norm)) return false
-  if (/\.env$/i.test(norm)) return false
+  if (/(^|\/)\.env($|\.)/i.test(norm) && !/\.env\.example$/i.test(norm)) return false
+  if (/\.env$/i.test(norm) && !/\.env\.example$/i.test(norm)) return false
   if (/test-modelskey\.env$/i.test(norm)) return false
   if (FORBIDDEN_NAME.test(norm)) return false
   if (norm === 'pnpm-lock.yaml') return true
@@ -128,10 +128,13 @@ function collectSourceFiles(dir, out = []) {
 function assertCleanZipListing(entries, label) {
   const bad = entries.filter((e) => {
     const norm = e.replace(/\\/g, '/')
+    if (/\.env\.example$/i.test(norm)) return false
     return (
       FORBIDDEN_NAME.test(norm) ||
       /(^|\/)docs\/qa(\/|$)/i.test(norm) ||
-      /smoke-extension|\.env|test-modelskey/i.test(norm)
+      /smoke-extension/i.test(norm) ||
+      /(^|\/)\.env($|\.|$)/i.test(norm) ||
+      /test-modelskey\.env$/i.test(norm)
     )
   })
   if (bad.length) {
@@ -288,9 +291,17 @@ async function main() {
     notes,
     `# Tonkatsu Translate v${version}
 
-Clean release (GitHub sideload; **not** Chrome Web Store).
+GitHub sideload release (**not** Chrome Web Store).
 
-Default engine: **DeepL** (BYOK). MyMemory removed. Machine-translation requests go directly to the provider you configure.
+Version tag \`a\` already means Alpha / test build — do not append a second “Alpha” to the release title.
+
+Default engine: **DeepL** (BYOK). Also supported: MyMemory (no key), LibreTranslate, OpenAI-compatible / local Ollama. Requests go directly to the provider you configure.
+
+## Highlights (1.0.3a)
+
+- Paragraph-level emit + encyclopedia / competitive site-family rules
+- Link-preserving block replace; glossary placeholders for team brands
+- API keys stay in \`tonkatsu.secrets\` (local only)
 
 ## Assets
 

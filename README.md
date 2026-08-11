@@ -1,6 +1,6 @@
 # 炸猪排翻译 · Tonkatsu Translate
 
-> **v1.0.3a**（**Alpha 测试版本**）。通过 [GitHub Releases](https://github.com/SZMY-haruhi/tonkatsu-translate/releases) 分发；暂不上架 Chrome Web Store。
+> **v1.0.3a**（测试构建；`a` = Alpha）。通过 [GitHub Releases](https://github.com/SZMY-haruhi/tonkatsu-translate/releases) 分发；暂不上架 Chrome Web Store。
 
 <p align="center">
   <img src="branding/tonkatsu-mark-512.png" alt="炸猪排翻译" width="128" height="128" />
@@ -63,14 +63,14 @@ pnpm build
 也可用 PowerShell + [GitHub CLI](https://cli.github.com/) 拉取已发布的构建产物，再按上方步骤加载解压目录：
 
 ```powershell
-gh release download v1.0.2a -p "*chrome-mv3.zip" -D .
-Expand-Archive .\tonkatsu-translate-v1.0.2a-chrome-mv3.zip -DestinationPath .\tonkatsu-chrome
+gh release download v1.0.3a -p "*chrome-mv3.zip" -D .
+Expand-Archive .\tonkatsu-translate-v1.0.3a-chrome-mv3.zip -DestinationPath .\tonkatsu-chrome
 ```
 
 本地打出发行包（Chrome / 可选 Firefox / 干净源码 zip）：
 
 ```bash
-pnpm package -- --version=1.0.2a
+pnpm package -- --version=1.0.3a
 ```
 
 产物在仓库根目录 `release/`（已 gitignore）。
