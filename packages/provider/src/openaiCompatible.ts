@@ -2,6 +2,7 @@ import type {
   OpenAICompatibleProviderConfig,
   TranslationProvider,
 } from './types';
+import { appendOllamaOriginsHintIfNeeded } from './ollamaOrigins';
 
 function normalizeBaseUrl(baseUrl: string): string {
   return baseUrl.replace(/\/+$/, '');
@@ -62,6 +63,11 @@ function shouldDisableThinking(model: string): boolean {
   return /qwen3/i.test(model);
 }
 
+/** Hunyuan-MT / Hy-MT dedicated translators prefer a short JSON-only instruction. */
+function isHunyuanMtModel(model: string): boolean {
+  return /hy-?mt|hunyuan-?mt/i.test(model);
+}
+
 function extractMessageContent(message: {
   content?: unknown;
   reasoning_content?: unknown;
@@ -81,6 +87,7 @@ export function buildTranslationSystemPrompt(input: {
   count: number;
   strict: boolean;
   doNotTranslate?: string[];
+  model?: string;
 }): string {
   const sourceHint =
     !input.sourceLang || input.sourceLang === 'auto'
@@ -98,6 +105,21 @@ export function buildTranslationSystemPrompt(input: {
     glossary.length > 0
       ? ` Also keep these glossary terms exactly unchanged: ${glossary.join(', ')}.`
       : '';
+
+  // Compact prompt for dedicated MT checkpoints (Hy-MT / Hunyuan-MT).
+  // Still pass keep/glossary — placeholders [[Tn]] / names must survive.
+  if (input.model && isHunyuanMtModel(input.model)) {
+    const src =
+      !input.sourceLang || input.sourceLang === 'auto'
+        ? ''
+        : ` from ${input.sourceLang}`;
+    const compactKeep =
+      ' Keep [[Tn]] / [[Ln]] markers and glossary names unchanged.';
+    if (input.strict) {
+      return `Translate each string${src} into ${input.targetLang}.${compactKeep}${glossaryRule} Return ONLY a raw JSON array of strings with exactly ${input.count} items in the same order. No markdown, no keys, no commentary.`;
+    }
+    return `Translate each string${src} into ${input.targetLang}.${compactKeep}${glossaryRule} Return ONLY a JSON array of translated strings, same length/order as inputs. No markdown.`;
+  }
 
   if (input.strict) {
     return `You are a translation engine. ${sourceHint}. Translate each input string into ${input.targetLang}. ${keepRules}${glossaryRule} Output MUST be a raw JSON array of strings with exactly ${input.count} items in the same order. No markdown fences, no keys, no commentary, no trailing commas.`;
@@ -127,6 +149,7 @@ export function createOpenAICompatibleProvider(
       count: input.texts.length,
       strict,
       doNotTranslate: config.doNotTranslate,
+      model: config.model,
     });
     const user = JSON.stringify(input.texts);
 
@@ -154,17 +177,35 @@ export function createOpenAICompatibleProvider(
     const packMs = Date.now() - packStarted;
 
     const fetchStarted = Date.now();
-    const response = await fetchImpl(endpoint, {
-      method: 'POST',
-      headers,
-      body,
-    });
+    const timeoutMs = config.timeoutMs ?? 45_000;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    let response: Response;
+    try {
+      response = await fetchImpl(endpoint, {
+        method: 'POST',
+        headers,
+        body,
+        signal: controller.signal,
+      });
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw new Error(`Provider request timed out after ${timeoutMs}ms`);
+      }
+      throw error;
+    } finally {
+      clearTimeout(timer);
+    }
     const fetchMs = Date.now() - fetchStarted;
 
     if (!response.ok) {
       const errBody = await response.text().catch(() => '');
       const detail = errBody ? `: ${errBody.slice(0, 200)}` : '';
-      throw new Error(`Provider HTTP ${response.status} ${response.statusText}${detail}`);
+      const raw = `Provider HTTP ${response.status} ${response.statusText}${detail}`;
+      const message = appendOllamaOriginsHintIfNeeded(raw, baseUrl);
+      const err = new Error(message);
+      (err as Error & { status?: number }).status = response.status;
+      throw err;
     }
 
     const parseStarted = Date.now();
@@ -198,16 +239,23 @@ export function createOpenAICompatibleProvider(
   }): Promise<string[]> {
     if (input.texts.length === 0) return [];
 
+    const run = async (strict: boolean) => requestOnce(input, strict);
+
     try {
-      return await requestOnce(input, false);
+      return await run(false);
     } catch (error) {
       const message = error instanceof Error ? error.message : '';
+      const status = (error as Error & { status?: number })?.status;
+      if (status === 429 || /429|rate limit|too many requests/i.test(message)) {
+        await new Promise((r) => setTimeout(r, 1500));
+        return run(true);
+      }
       if (
         message.includes('non-JSON') ||
         message.includes('Provider JSON') ||
         message.includes('expected')
       ) {
-        return requestOnce(input, true);
+        return run(true);
       }
       throw error;
     }

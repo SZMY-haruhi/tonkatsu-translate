@@ -5,6 +5,11 @@
   "scripts": {
     "dev": "pnpm --filter @tonkatsu-translate/extension dev",
     "build": "pnpm -r build",
-    "package": "node scripts/package-release.mjs"
+    "package": "node scripts/package-release.mjs",
+    "smoke": "node scripts/smoke-extension.mjs"
+  },
+  "devDependencies": {
+    "dotenv": "^17.4.2",
+    "puppeteer-core": "^25.5.0"
   }
 }

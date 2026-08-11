@@ -241,6 +241,14 @@
                   <input id="localModel" type="text" placeholder="llama3.2" />
                 </label>
               </div>
+              <p class="help help--standalone">
+                <strong>Ollama 额外一步（扩展专用）：</strong>浏览器扩展访问本机 Ollama 时，需设置用户环境变量
+                <code>OLLAMA_ORIGINS=*</code>（或 <code>chrome-extension://*</code>），然后<strong>完全退出托盘 Ollama 并重新打开</strong>。
+                未设置时「测试连接」常会返回 HTTP 403。Windows 可运行仓库脚本
+                <code>scripts/setup-ollama-origins.ps1</code>，或在 PowerShell 执行：
+                <code>[System.Environment]::SetEnvironmentVariable('OLLAMA_ORIGINS','*','User')</code>。
+                LM Studio 一般无需此变量；请确认 Local Server 已启动且地址匹配。
+              </p>
             </div>
 
             <p class="help help--security">
@@ -308,13 +316,13 @@
 
             <div class="card">
               <div class="card__header">
-                <div><h2>保留词</h2><p>OpenAI 兼容与本地模型会将这些专名写入提示词。</p></div>
+                <div><h2>保留词</h2><p>会经占位符与提示词保护；勿枚举万人，只加你在意的队名/ID。</p></div>
               </div>
               <label class="field">
                 <span>专名 / 术语 <em>每行一个</em></span>
                 <textarea id="doNotTranslate" rows="7" placeholder="Vitality&#10;s1mple&#10;NaVi"></textarea>
               </label>
-              <p class="help">DeepL 与 LibreTranslate 不保证严格保留这些词。</p>
+              <p class="help">竞技族站点会叠加一小份默认品牌词表。DeepL / LibreTranslate 不保证严格保留。</p>
             </div>
           </section>
 

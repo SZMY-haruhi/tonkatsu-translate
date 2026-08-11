@@ -593,6 +593,8 @@ textarea:focus {
 
 .status[data-state="error"] {
   color: var(--error);
+  white-space: pre-wrap;
+  line-height: 1.45;
 }
 
 .button {

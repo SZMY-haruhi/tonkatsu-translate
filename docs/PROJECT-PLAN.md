@@ -1,7 +1,7 @@
 # 炸猪排翻译 · 项目总计划书
 
 > **文档版本：** 2026-08-10  
-> **产品版本：** v1.0.2a（Alpha 测试）  
+> **产品版本：** v1.0.3a（Alpha 测试）
 > **仓库：** https://github.com/SZMY-haruhi/tonkatsu-translate
 
 本文档是项目的**唯一**规划与阶段性总结文件，替代此前分散在 `docs/superpowers/` 等处的旧计划书。
@@ -95,7 +95,7 @@ docs/                    隐私说明、本总计划书
 
 | 维度 | 状态 |
 |------|------|
-| **版本** | v1.0.2a Alpha（[Release](https://github.com/SZMY-haruhi/tonkatsu-translate/releases/tag/v1.0.2a)） |
+| **版本** | v1.0.3a Alpha（内部验收；站点族优化） |
 | **阶段** | 长期 Alpha 测试；未达产品目标，持续迭代 |
 | **默认引擎** | DeepL |
 | **核心路径** | 默认替换 / 实验双语 / Alt 划词 / 侧边气泡 / 站点规则 — 可用 |
@@ -197,8 +197,9 @@ pnpm package -- --version=x.y.z     # release/ 下 chrome / firefox / source zip
 | v1.0.0-rc.2 | DeepL 默认、调度/视口/缓存 |
 | **v1.0.1a** | 控制面板重构、MyMemory 恢复、站点规则层级；**长期 Alpha 起点** |
 | **v1.0.2a** | API Key 仅存本机 local；内容脚本不读密钥；控制面板安全说明 |
+| **v1.0.3a** | 段落发射 + 百科/竞技站点族：语言墙排除、链接结构化写回、专名占位 |
 | v1.0.xa | Alpha 测试系列（功能迭代，非稳定承诺） |
 
 ---
 
-*最后更新：2026-08-10 · 与 v1.0.2a Alpha 发行同步*
+*最后更新：2026-08-11 · 与 v1.0.3a Alpha 内部验收同步*

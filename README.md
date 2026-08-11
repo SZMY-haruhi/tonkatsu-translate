@@ -1,6 +1,6 @@
 # 炸猪排翻译 · Tonkatsu Translate
 
-> **v1.0.2a**（**Alpha 测试版本**）。通过 [GitHub Releases](https://github.com/SZMY-haruhi/tonkatsu-translate/releases) 分发；暂不上架 Chrome Web Store。
+> **v1.0.3a**（**Alpha 测试版本**）。通过 [GitHub Releases](https://github.com/SZMY-haruhi/tonkatsu-translate/releases) 分发；暂不上架 Chrome Web Store。
 
 <p align="center">
   <img src="branding/tonkatsu-mark-512.png" alt="炸猪排翻译" width="128" height="128" />
@@ -16,7 +16,13 @@
 
 本扩展**尚未达到产品目标**，计划**长期处于 Alpha 测试阶段**：功能可用、持续迭代，但不承诺稳定或完整。版本号采用 `1.0.xa` 形式标识测试构建；欢迎侧载试用与反馈，请自行承担日常使用风险。
 
-## 本版要点（1.0.2a）
+## 本版要点（1.0.3a）
+
+- 发射端段落化 + 站点族规则（百科 / 综合竞技）：语言墙排除、结构化链接写回、专名占位
+- 默认替换模式；DeepL + OpenAI 兼容 / 本地 Ollama Hy-MT
+- API Key 仅存本机 `tonkatsu.secrets`（延续 1.0.2a 阀门）
+
+## 本版要点（1.0.2a，前序）
 
 - API Key **仅保存在本机**（`storage.local`），不进 Chrome 账号同步；内容脚本不读取密钥
 - 控制面板引擎区增加 Key 安全说明
@@ -86,6 +92,24 @@ pnpm --filter @tonkatsu-translate/extension build:firefox
 3. 源语言默认 **自动检测**；目标语言默认简体中文
 4. 质量档：OpenAI 兼容 API 与本地模型拥有独立配置；切换不会覆盖彼此的地址、密钥或模型
 5. 打开网页 → 刷新 → 点侧边 Logo 气泡，或用快捷键 `Alt+Shift+T`
+
+### 本地模型（Ollama / LM Studio，进阶）
+
+本地档需要你本机先安装并启动运行时；**发行包不会内嵌模型**。
+
+**Ollama（重要）：** 浏览器扩展访问本机 Ollama 时，Ollama 默认会拒绝带 `chrome-extension://` 的请求（表现为测试连接 **HTTP 403**）。请在本机设置用户环境变量后重启 Ollama：
+
+```powershell
+# Windows：仓库一键脚本（推荐）
+powershell -ExecutionPolicy Bypass -File .\scripts\setup-ollama-origins.ps1
+
+# 或手动：
+[System.Environment]::SetEnvironmentVariable('OLLAMA_ORIGINS','*','User')
+```
+
+然后**完全退出托盘中的 Ollama 并重新打开**。控制面板 → 本地模型 → 填入地址（默认 `http://127.0.0.1:11434/v1`）与模型名 → **测试连接**。若仍失败，面板会显示可操作的排查步骤。
+
+LM Studio 一般无需 `OLLAMA_ORIGINS`；启动 Local Server 后使用默认 `http://127.0.0.1:1234/v1` 即可。
 
 
 ## Privacy

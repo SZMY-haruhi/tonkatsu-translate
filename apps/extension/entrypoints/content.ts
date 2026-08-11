@@ -56,6 +56,7 @@ export default defineContentScript({
           maxConcurrency: settings.maxConcurrency,
           targetLang: settings.targetLang,
           engine: settings.engine,
+          glossaryTerms: settings.doNotTranslate,
           onProgress: (state) => {
             void publish(state);
           },

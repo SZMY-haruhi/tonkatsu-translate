@@ -31,11 +31,11 @@ export function resolveSchedulerTuning(
   )
 
   if (engine === 'local-openai') {
+    // Smaller batches = fewer silent JSON/echo failures on long wiki paragraphs.
     return {
-      coalesceMs: 80,
-      maxBatchSize: mode === 'bilingual' ? 12 : 16,
-      maxBatchChars: mode === 'bilingual' ? 1400 : 1200,
-      // Single local GPU: keep concurrency low to avoid thrash.
+      coalesceMs: mode === 'replace' ? 40 : 60,
+      maxBatchSize: mode === 'bilingual' ? 12 : 6,
+      maxBatchChars: mode === 'bilingual' ? 1600 : 2200,
       maxInFlight: Math.min(2, user),
     }
   }
@@ -59,11 +59,12 @@ export function resolveSchedulerTuning(
     }
   }
 
-  // Cloud OpenAI-compatible quality tier
+  // Cloud OpenAI-compatible quality tier — modest batches + lower fan-out to
+  // reduce provider rate-limit stalls on long encyclopedia pages.
   return {
     coalesceMs: 100,
-    maxBatchSize: mode === 'bilingual' ? 16 : 20,
-    maxBatchChars: mode === 'bilingual' ? 1800 : 1600,
-    maxInFlight: Math.min(4, user),
+    maxBatchSize: mode === 'bilingual' ? 10 : 8,
+    maxBatchChars: mode === 'bilingual' ? 1200 : 1000,
+    maxInFlight: Math.min(3, user),
   }
 }

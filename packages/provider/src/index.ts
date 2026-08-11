@@ -39,3 +39,8 @@ export {
   type LocalPresetKind,
   type LocalRuntime,
 } from './localOpenAIPreset'
+export {
+  isLikelyOllamaEndpoint,
+  appendOllamaOriginsHintIfNeeded,
+  OLLAMA_ORIGINS_SETUP_HINT_ZH,
+} from './ollamaOrigins'

@@ -1,12 +1,6 @@
 import {
-  DOMTranslator,
-  IntersectionScheduler,
-  NodesTranslator,
-  PersistentDOMTranslator,
-} from 'domtranslator';
-import { createNodesFilter } from 'domtranslator/utils/nodes';
-import {
   applyBilingual,
+  applyBlockReplace,
   bilingualStyleText,
   BLOCK_SELECTOR,
   BILINGUAL_ATTR,
@@ -15,15 +9,18 @@ import {
   isLeafTextBlock,
   isBilingualMarkup,
   isBlockLikeLink,
+  isBlockReplaced,
+  readBlockText,
+  readBlockTextForTranslate,
   restoreBilingual,
-  restoreTree,
+  restoreBlockReplace,
   shouldSkipBilingualHost,
 } from '@tonkatsu-translate/render';
 import type { ProviderEngine } from '@tonkatsu-translate/provider';
 import type { SessionState } from './messaging';
 import { sendToBackground } from './messaging';
 import { setSessionState } from './session';
-import { looksAlreadyInTargetLang, looksLikeInlineBilingual } from './langHeuristics';
+import { looksAlreadyInTargetLang, looksLikeInlineBilingual, translationLooksUntranslated } from './langHeuristics';
 import {
   resolveSchedulerTuning,
   type SchedulerTuning,
@@ -35,11 +32,23 @@ import {
 } from './contentTranslateCache';
 import { loadPublicSettings } from './settings';
 import { ttPerfMark, ttPerfReset, ttPerfSummary } from './ttPerf';
+import { resolveEffectiveRule } from './translationRules';
+import { collectReplaceParagraphs } from './contentExtract';
+import {
+  applyGlossaryPlaceholders,
+  COMPETITIVE_DEFAULT_GLOSSARY,
+  restoreGlossaryPlaceholders,
+  sortGlossaryTerms,
+} from './properNouns';
 
 type Pending = {
   text: string;
-  /** 0 = in viewport, 1 = near, 2 = far / background. */
-  priority: number;
+  /**
+   * Ordering key — lower runs first.
+   * Bilingual: 0 = in viewport, 1 = near, 2 = far.
+   * Replace: document Y / main-column sort key from computeReplaceSortKey.
+   */
+  sortKey: number;
   resolve: (value: string) => void;
   reject: (reason?: unknown) => void;
 };
@@ -49,6 +58,8 @@ export type PageSessionControls = {
   restore: () => void;
 };
 
+type BatcherOrderMode = 'viewport-tiers' | 'document-order';
+
 type BatcherOptions = {
   translateBatch: (texts: string[]) => Promise<string[]>;
   isStopped: () => boolean;
@@ -57,6 +68,8 @@ type BatcherOptions = {
   maxBatchSize?: number;
   maxBatchChars?: number;
   maxInFlight?: number;
+  /** replace → document-order; bilingual → viewport tiers. */
+  orderMode?: BatcherOrderMode;
 };
 
 function takeBatch(
@@ -96,16 +109,30 @@ function queueChars(queues: Pending[][]) {
   );
 }
 
+function insertBySortKey(queue: Pending[], item: Pending) {
+  let lo = 0;
+  let hi = queue.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (queue[mid]!.sortKey > item.sortKey) hi = mid;
+    else lo = mid + 1;
+  }
+  queue.splice(lo, 0, item);
+}
+
 /**
- * Coalesce many per-node translate calls into fewer provider round-trips,
- * prefer higher-priority (viewport) work, and allow parallel in-flight batches.
+ * Coalesce many per-node translate calls into fewer provider round-trips.
+ * - viewport-tiers: bilingual (in-view first, longer prose within tier)
+ * - document-order: replace (top-to-bottom / main column)
  */
 function createBatchedTranslator(options: BatcherOptions) {
   const coalesceMs = options.coalesceMs ?? 100;
   const maxBatchSize = options.maxBatchSize ?? 16;
   const maxBatchChars = options.maxBatchChars ?? 2000;
   const maxInFlight = Math.max(1, options.maxInFlight ?? 3);
+  const orderMode = options.orderMode ?? 'viewport-tiers';
 
+  // Tier 0/1/2 for bilingual; replace uses a single sorted queue in [0].
   const queues: Pending[][] = [[], [], []];
   let timer: number | null = null;
   let inFlight = 0;
@@ -119,19 +146,34 @@ function createBatchedTranslator(options: BatcherOptions) {
   };
 
   const flushOne = async (batch: Pending[]) => {
+    const texts = batch.map((item) => item.text);
+    let lastError: unknown;
     try {
-      if (options.isStopped()) {
-        batch.forEach((item) => item.reject(new Error('已停止')));
-        return;
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        try {
+          if (options.isStopped()) {
+            batch.forEach((item) => item.reject(new Error('已停止')));
+            return;
+          }
+          if (attempt > 0) {
+            await new Promise((r) => window.setTimeout(r, 800 * attempt));
+          }
+          const translations = await options.translateBatch(texts);
+          batch.forEach((item, index) => {
+            item.resolve(translations[index] ?? item.text);
+          });
+          options.onProgress(batch.length);
+          return;
+        } catch (error) {
+          lastError = error;
+        }
       }
-      const translations = await options.translateBatch(batch.map((item) => item.text));
-      // Resolve individually so DOM can paint progressively as each item settles.
-      batch.forEach((item, index) => {
-        item.resolve(translations[index] ?? item.text);
-      });
+      console.warn(
+        '[炸猪排翻译] batch failed after retry; keeping original text:',
+        lastError instanceof Error ? lastError.message : lastError,
+      );
+      batch.forEach((item) => item.resolve(item.text));
       options.onProgress(batch.length);
-    } catch (error) {
-      batch.forEach((item) => item.reject(error));
     } finally {
       inFlight -= 1;
       if (queueDepth(queues) > 0) void pump();
@@ -151,7 +193,7 @@ function createBatchedTranslator(options: BatcherOptions) {
     }
   };
 
-  return (text: string, priority = 1) =>
+  return (text: string, sortKey = 1) =>
     new Promise<string>((resolve, reject) => {
       if (options.isStopped()) {
         reject(new Error('已停止'));
@@ -161,13 +203,28 @@ function createBatchedTranslator(options: BatcherOptions) {
         resolve(text);
         return;
       }
-      const tier = Math.min(2, Math.max(0, Math.floor(priority)));
-      queues[tier]!.push({ text, priority: tier, resolve, reject });
+
+      const item: Pending = { text, sortKey, resolve, reject };
+
+      if (orderMode === 'document-order') {
+        insertBySortKey(queues[0]!, item);
+      } else {
+        const tier = Math.min(2, Math.max(0, Math.floor(sortKey)));
+        const queue = queues[tier]!;
+        // Longer prose first within a viewport tier.
+        const insertAt = queue.findIndex(
+          (pending) => pending.text.length < text.length,
+        );
+        if (insertAt === -1) queue.push(item);
+        else queue.splice(insertAt, 0, item);
+      }
+
       schedule();
-      if (
-        (queueDepth(queues) >= maxBatchSize || queueChars(queues) >= maxBatchChars) &&
-        inFlight < maxInFlight
-      ) {
+      const forceFlush =
+        text.length >= Math.floor(maxBatchChars * 0.75) ||
+        queueDepth(queues) >= maxBatchSize ||
+        queueChars(queues) >= maxBatchChars;
+      if (forceFlush && inFlight < maxInFlight) {
         if (timer != null) {
           window.clearTimeout(timer);
           timer = null;
@@ -183,6 +240,7 @@ function batcherFromTuning(
     translateBatch: (texts: string[]) => Promise<string[]>;
     isStopped: () => boolean;
     onProgress: (doneDelta: number) => void;
+    orderMode?: BatcherOrderMode;
   },
 ) {
   return createBatchedTranslator({
@@ -191,6 +249,7 @@ function batcherFromTuning(
     maxBatchSize: tuning.maxBatchSize,
     maxBatchChars: tuning.maxBatchChars,
     maxInFlight: tuning.maxInFlight,
+    orderMode: options.orderMode,
   });
 }
 
@@ -442,9 +501,19 @@ function startReplaceTranslation(options: {
   translateBatch: (texts: string[]) => Promise<string[]>;
   onProgress: (state: SessionState) => void;
   maxConcurrency?: number;
+  targetLang?: string;
   engine?: ProviderEngine;
+  glossaryTerms?: string[];
 }): PageSessionControls {
   let stopped = false;
+  const targetLang = options.targetLang?.trim() || 'zh-CN';
+  const rule = resolveEffectiveRule();
+  const glossaryTerms = sortGlossaryTerms([
+    ...(options.glossaryTerms ?? []),
+    ...(rule.useCompetitiveGlossary ? COMPETITIVE_DEFAULT_GLOSSARY : []),
+  ]);
+  const lastText = new WeakMap<Element, string>();
+  const queued = new WeakSet<Element>();
   const tuning = resolveSchedulerTuning(
     options.engine ?? 'deepl',
     'replace',
@@ -452,78 +521,119 @@ function startReplaceTranslation(options: {
   );
   const progress = createProgressEmitter(() => stopped, options.onProgress);
 
-  const translateCallback = batcherFromTuning(tuning, {
+  const translateOne = batcherFromTuning(tuning, {
     translateBatch: options.translateBatch,
     isStopped: () => stopped,
     onProgress: (delta) => progress.bumpDone(delta),
+    orderMode: 'document-order',
   });
 
-  const nodesTranslator = new NodesTranslator(async (text, _score) => {
-    if (isNonTranslatableNoise(text)) return text;
+  const processHost = async (el: Element, _precomputedText?: string) => {
+    if (stopped) return;
+    const plain = readBlockText(el);
+    if (isBlockReplaced(el) && lastText.get(el) === plain) return;
+    if (plain.length < rule.paragraphMinTextCount) return;
+    if (isNonTranslatableNoise(plain)) return;
+    if (looksLikeInlineBilingual(plain)) return;
+    if (looksAlreadyInTargetLang(plain, targetLang)) return;
+    if (queued.has(el) && lastText.get(el) === plain) return;
+
+    const forMt = readBlockTextForTranslate(el);
+    const packed = applyGlossaryPlaceholders(forMt, glossaryTerms);
+
+    queued.add(el);
+    lastText.set(el, plain);
     progress.bumpTotal(1);
-    // IntersectionScheduler already defers off-screen nodes; treat as high priority.
-    return translateCallback(text, 0);
-  });
-
-  const domTranslator = new DOMTranslator(nodesTranslator, {
-    scheduler: new IntersectionScheduler({ rootMargin: '280px' }),
-    filter: createNodesFilter({
-      attributesList: ['title', 'alt', 'placeholder', 'aria-label'],
-      ignoredSelectors: [
-        'script',
-        'style',
-        'noscript',
-        'code',
-        'pre',
-        'textarea',
-        'svg',
-        'math',
-        '[contenteditable="true"]',
-        '#tt-edge-dock',
-        '.tt-selection-bubble',
-      ],
-    }),
-  });
-
-  const persistent = new PersistentDOMTranslator(domTranslator);
-  const root = document.documentElement;
-  progress.emitNow({ status: 'running', done: 0, total: 0 });
-  try {
-    persistent.translate(root);
-  } catch (error) {
-    progress.emitNow({
-      status: 'error',
-      message: error instanceof Error ? error.message : '无法开始翻译',
-    });
-  }
-
-  const disconnectObservers = () => {
-    // PersistentDOMTranslator only exposes restore() for teardown; pull the
-    // private observer map so "停止" can halt work without reverting text.
-    const storage = (
-      persistent as unknown as {
-        observedNodesStorage?: Map<Element, { disconnect: () => void }>;
+    const sortKey = Math.max(0, el.getBoundingClientRect().top + window.scrollY) * 100;
+    try {
+      let translated = await translateOne(packed.text, sortKey);
+      translated = restoreGlossaryPlaceholders(translated, packed.terms);
+      // Batch failures often echo the source; retry once at highest priority.
+      if (translationLooksUntranslated(forMt, translated, targetLang)) {
+        let retry = await translateOne(packed.text, -1e9);
+        retry = restoreGlossaryPlaceholders(retry, packed.terms);
+        translated = retry;
       }
-    ).observedNodesStorage;
-    const observer = storage?.get(root);
-    observer?.disconnect();
-    storage?.delete(root);
+      if (stopped) return;
+      if (!el.isConnected) {
+        queued.delete(el);
+        return;
+      }
+      // Never lock an English echo as replaced — leave original for mutation retry.
+      if (translationLooksUntranslated(forMt, translated, targetLang)) {
+        queued.delete(el);
+        return;
+      }
+      const now = readBlockText(el);
+      if (
+        !isBlockReplaced(el) &&
+        now.length > 0 &&
+        now !== plain &&
+        now.slice(0, 48) !== plain.slice(0, 48)
+      ) {
+        queued.delete(el);
+        return;
+      }
+      applyBlockReplace(el, translated);
+      lastText.set(el, readBlockText(el));
+      queued.delete(el);
+    } catch (error) {
+      queued.delete(el);
+      if (!stopped) {
+        progress.emitNow({
+          status: 'error',
+          message: error instanceof Error ? error.message : '翻译失败',
+        });
+      }
+    }
   };
+
+  let mutationTimer: number | null = null;
+  const mutationObserver = new MutationObserver(() => {
+    if (stopped) return;
+    if (mutationTimer != null) return;
+    mutationTimer = window.setTimeout(() => {
+      mutationTimer = null;
+      if (stopped) return;
+      for (const unit of collectReplaceParagraphs(rule)) {
+        if (!queued.has(unit.host) && !isBlockReplaced(unit.host)) {
+          void processHost(unit.host, unit.text);
+        }
+      }
+    }, 200);
+  });
+
+  progress.emitNow({ status: 'running', done: 0, total: 0 });
+  ttPerfReset();
+  const scanStarted = performance.now();
+  const units = collectReplaceParagraphs(rule);
+  const scanMs = performance.now() - scanStarted;
+  ttPerfMark('local', 'paragraph extract', scanMs, {
+    rule: rule.id,
+    paragraphs: units.length,
+  });
+
+  units.forEach((unit) => {
+    void processHost(unit.host, unit.text);
+  });
+
+  mutationObserver.observe(document.documentElement, {
+    childList: true,
+    subtree: true,
+  });
 
   return {
     stop() {
       stopped = true;
-      disconnectObservers();
+      mutationObserver.disconnect();
+      ttPerfSummary('stop');
       progress.emitNow({ status: 'idle' });
     },
     restore() {
       stopped = true;
-      try {
-        restoreTree(persistent, root);
-      } catch {
-        // Already torn down / never observed — still clear best-effort.
-        disconnectObservers();
-      }
+      mutationObserver.disconnect();
+      restoreBlockReplace(document);
+      ttPerfSummary('restore');
       progress.emitNow({ status: 'idle' });
     },
   };
@@ -536,6 +646,7 @@ export function startPageTranslation(options: {
   maxConcurrency?: number;
   targetLang?: string;
   engine?: ProviderEngine;
+  glossaryTerms?: string[];
 }): PageSessionControls {
   if (options.mode === 'bilingual') {
     return startBilingualTranslation(options);

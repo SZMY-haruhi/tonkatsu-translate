@@ -1,6 +1,7 @@
 import {
   LOCAL_LMSTUDIO_DEFAULT,
   LOCAL_OLLAMA_DEFAULT,
+  appendOllamaOriginsHintIfNeeded,
   type LocalRuntime,
 } from '@tonkatsu-translate/provider';
 import { sendToBackground } from '../../lib/messaging';
@@ -286,6 +287,41 @@ form?.addEventListener('submit', async (event) => {
   }
 });
 
+function formatTestFailureMessage(raw: string): string {
+  const engine = readEngine();
+  const localRuntime = readLocalRuntime();
+  const baseUrl =
+    engine === 'local-openai'
+      ? fields.localBaseUrl?.value.trim() || LOCAL_OLLAMA_DEFAULT
+      : fields.baseUrl?.value.trim() || '';
+
+  let message = raw.trim() || '未知错误';
+
+  if (
+    engine === 'local-openai' &&
+    localRuntime === 'ollama' &&
+    /403|Forbidden/i.test(message)
+  ) {
+    message = appendOllamaOriginsHintIfNeeded(message, baseUrl, {
+      forceOllama: true,
+    });
+  } else {
+    message = appendOllamaOriginsHintIfNeeded(message, baseUrl);
+  }
+
+  if (
+    engine === 'local-openai' &&
+    /Failed to fetch|NetworkError|ECONNREFUSED|连接被拒绝|load failed/i.test(
+      message,
+    )
+  ) {
+    message +=
+      '\n\n请确认本机守护进程已启动：Ollama 默认 http://127.0.0.1:11434/v1 ，LM Studio 默认 http://127.0.0.1:1234/v1 ；模型名须与本机已拉取/加载的名称一致。';
+  }
+
+  return message;
+}
+
 testBtn?.addEventListener('click', async () => {
   testBtn.disabled = true;
   setTestStatus('正在测试当前引擎…');
@@ -295,15 +331,19 @@ testBtn?.addEventListener('click', async () => {
       settings: readForm(),
     });
     const result = await sendToBackground({ type: 'TEST_CONNECTION' });
-    setTestStatus(
-      result.ok
-        ? '连接成功。'
-        : `连接失败：${result.message ?? '未知错误'}`,
-      result.ok ? 'success' : 'error',
-    );
+    if (result.ok) {
+      setTestStatus('连接成功。', 'success');
+    } else {
+      setTestStatus(
+        `连接失败：${formatTestFailureMessage(result.message ?? '未知错误')}`,
+        'error',
+      );
+    }
   } catch (error) {
     setTestStatus(
-      error instanceof Error ? error.message : '连接测试失败。',
+      formatTestFailureMessage(
+        error instanceof Error ? error.message : '连接测试失败。',
+      ),
       'error',
     );
   } finally {

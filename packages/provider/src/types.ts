@@ -15,4 +15,6 @@ export type OpenAICompatibleProviderConfig = {
   fetchImpl?: typeof fetch;
   /** Extra terms that must remain unchanged in translations. */
   doNotTranslate?: string[];
+  /** Abort hung chat/completions calls (ms). Default 45000. */
+  timeoutMs?: number;
 };
