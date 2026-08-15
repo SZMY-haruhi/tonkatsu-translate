@@ -137,3 +137,16 @@ MIT
 | [translate-tools/core (anylang)](https://github.com/translate-tools/core) | 翻译系统原语与调度思路参考 | https://github.com/translate-tools/core |
 | [Linguist](https://github.com/translate-tools/linguist) | 成熟开源翻译扩展的架构参考 | https://github.com/translate-tools/linguist |
 | [Traduzir-paginas-web (TWP)](https://github.com/FilipePS/Traduzir-paginas-web) | 网页翻译扩展领域的经典开源实现 | https://github.com/FilipePS/Traduzir-paginas-web |
+
+---
+
+## Author
+
+<a href="https://tonkatsu258.vercel.app/">
+  <img src="branding/tonkatsu-mark-512.png" width="96" height="96" alt="tonkatsu258" />
+</a>
+
+**感谢star❤️**
+
+**[tonkatsu258](https://tonkatsu258.vercel.app/)** · [个人网站](https://tonkatsu258.vercel.app/)
+
